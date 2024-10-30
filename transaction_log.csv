@@ -1,5 +1,9 @@
 Timestamp,Transaction Hash,Sender,Receiver,Amount,Memo
-2024-10-31 00:08:32.183725,member123,50,Tithe Contribution
-2024-10-31 00:14:42.509201,tx123hash,senderAddr,receiverAddr,member123,50,Tithe Contribution,Monthly donation
-2024-10-31 00:34:49.021000,tx123hash3,senderAddr3,receiverAddr3,member125,100,Tithe Contribution,Annual donation
-2024-10-31 00:35:41.545610,tx123hash4,senderAddr4,receiverAddr4,member126,75,Ritual Offering,Special holiday offering
+2024-10-31 00:14:42.509201,tx123hash,senderAddr,churchAddr,50,Tithe Contribution Monthly donation
+2024-10-31 00:34:49.021000,tx123hash3,senderAddr3,churchAddr,100,Tithe Contribution Annual donation
+2024-10-31 00:35:41.545610,tx123hash4,senderAddr4,churchAddr,75,Ritual Offering Special holiday offering
+2024-10-31 01:12:22.102300,tx123hash5,senderAddr,churchAddr,25,Weekly Tithe
+2024-10-31 01:44:17.998223,tx123hash6,senderAddr3,churchAddr,150,Special Donation
+2024-10-31 02:10:12.504923,tx123hash7,senderAddr4,churchAddr,100,Holiday Gift
+2024-10-31 02:32:53.123450,tx123hash8,senderAddr,churchAddr,200,Yearly Contribution
+2024-10-31 02:55:45.999134,tx123hash9,senderAddr3,churchAddr,50,Monthly Support
