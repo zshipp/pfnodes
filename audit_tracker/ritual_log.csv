@@ -1,0 +1,5 @@
+Timestamp,Transaction Hash,Member ID,Amount,Ritual Type
+2024-10-31 00:14:42,tx123hash,senderAddr,50,Tithe Contribution
+2024-10-31 00:34:49,tx456hash,senderAddr2,100,Special Donation
+2024-10-31 00:35:41,tx789hash,senderAddr3,50,Ritual Offering
+2024-10-31 01:12:22,tx101hash,senderAddr,50,Tithe Contribution
