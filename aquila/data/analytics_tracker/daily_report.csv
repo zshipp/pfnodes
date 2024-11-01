@@ -1,0 +1,14 @@
+Metric,Value
+Total Unique Members Engaged,3
+Hourly Peak Engagement,2024-11-01 10:00:00
+,
+Hourly Engagement Breakdown
+2024-11-01 09:00:00,1
+2024-11-01 10:00:00,2
+2024-11-01 14:00:00,1
+2024-11-01 15:00:00,2
+,
+Member Engagement Breakdown
+member1,3
+member2,2
+member3,1
