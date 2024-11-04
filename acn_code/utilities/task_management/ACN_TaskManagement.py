@@ -9,6 +9,15 @@ import re
 from password_map_loader import PasswordMapLoader
 from ACN_Utilities import ACNUtilities
 import psycopg2
+import logging
+
+# Configure logging to write to a file
+logging.basicConfig(
+    filename="acn_ritual_log.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
 
 # Database connection function
 def connect_to_db():
@@ -105,7 +114,6 @@ class ACNTaskManagement:
     Returns:
     - dict: Verification result with 'status' and 'reason' for any unverified submissions.
     """
-    # Extract member IDs for group transactions or a single ID for individual
     member_ids = transaction_data.get("member_ids", [transaction_data.get("member_id")])
     wallet_address = transaction_data.get("wallet_address")
     amount = transaction_data.get("amount")
@@ -113,29 +121,33 @@ class ACNTaskManagement:
     memo_data = transaction_data.get("memo_data")
     transaction_type = self._classify_transaction(memo_data)
 
-    # Conditional handling for group rituals
     if transaction_type == "collaboration_ritual" and member_ids:
         for member_id in member_ids:
-            # Log each member's participation in the Submissions table
             self._log_submission(member_id, wallet_address, amount, timestamp, memo_data, transaction_type)
         
-        # Log the group participation to GroupParticipation table
         self._log_group_participation(member_ids, transaction_data.get("ritual_id"), timestamp)
+        log_message = f"Group ritual logged successfully for ritual_id={transaction_data.get('ritual_id')}"
+        logging.info(log_message)
 
-        return {"status": "verified", "reason": "Group ritual logged successfully"}
+        return {"status": "verified", "reason": log_message}
 
     else:
-        # Log non-group transactions as usual
         member_id = member_ids[0] if isinstance(member_ids, list) else transaction_data.get("member_id")
         self._log_submission(member_id, wallet_address, amount, timestamp, memo_data, transaction_type)
 
-        # Verification based on transaction type
         verification_result = self._verify_transaction(transaction_type, transaction_data)
 
+        # Log failed verifications
+        if verification_result["status"] == "unverified":
+            log_message = (f"Failed verification for ritual_id={transaction_data.get('ritual_id')}, "
+                           f"member_id={member_id}, amount={amount}, reason={verification_result['reason']}")
+            logging.warning(log_message)
+        
         # Update verification status in Submissions table
         self._update_verification_status(verification_result, member_id, timestamp)
         
         return verification_result
+
 
 def log_and_verify_submission(self, transaction_data):
     """
@@ -250,26 +262,31 @@ def log_and_verify_submission(self, transaction_data):
         return {"status": "verified"}
 
     def _verify_collaboration_ritual(self, transaction_data):
-        """
-        Verifies a collaboration ritual transaction.
-        
-        Parameters:
-        - transaction_data (dict): Contains 'member_id', 'memo_data', etc.
-        
-        Returns:
-        - dict: Verification result with 'status' and optional 'reason'.
-        """
-        memo_data = transaction_data.get("memo_data")
-        participant_id = transaction_data.get("member_id")
+    """
+    Verifies a collaboration ritual transaction.
+    
+    Parameters:
+    - transaction_data (dict): Contains 'member_id', 'memo_data', etc.
+    
+    Returns:
+    - dict: Verification result with 'status' and optional 'reason'.
+    """
+    memo_data = transaction_data.get("memo_data")
+    participant_id = transaction_data.get("member_id")
 
-        if "COLLABORATION_RITUAL" not in memo_data:
-            return {"status": "unverified", "reason": "Invalid collaboration ritual memo format"}
+    if "COLLABORATION_RITUAL" not in memo_data:
+        reason = "Invalid collaboration ritual memo format"
+        logging.warning(f"Failed verification for ritual_id={transaction_data.get('ritual_id')}, member_id={participant_id}, reason={reason}")
+        return {"status": "unverified", "reason": reason}
 
-        participant_count = transaction_data.get("participant_count", 1)
-        if participant_count < 2:
-            return {"status": "unverified", "reason": "Collaboration ritual requires more participants"}
+    participant_count = transaction_data.get("participant_count", 1)
+    if participant_count < 2:
+        reason = "Collaboration ritual requires more participants"
+        logging.warning(f"Failed verification for ritual_id={transaction_data.get('ritual_id')}, member_id={participant_id}, reason={reason}")
+        return {"status": "unverified", "reason": reason}
 
-        return {"status": "verified"}
+    return {"status": "verified"}
+
 
     def _log_group_participation(self, member_ids, transaction_data):
         """
