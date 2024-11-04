@@ -1,0 +1,6 @@
+user_account,initiation_rite,memo_data,directional_pft,memo_format,requires_work
+user2,rite2_longer_than_10,,,,1
+user3,rite3,,,,0
+user5,rite5_longer_than_10,,,,1
+user1,,reward2,2.0,text,0
+user4,,reward4,3.0,text,0
