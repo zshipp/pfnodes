@@ -350,8 +350,12 @@ def log_and_verify_submission(self, transaction_data):
             return "financial"
         elif "RITUAL_SUBMISSION" in memo_data:
             return "ritual"
+        elif "COLLABORATION_RITUAL:TYPE1" in memo_data:
+            return "collaboration_ritual_type1"
+        elif "COLLABORATION_RITUAL:TYPE2" in memo_data:
+            return "collaboration_ritual_type2"
         elif "COLLABORATION_RITUAL" in memo_data:
-            return "collaboration_ritual"
+            return "collaboration_ritual"  # General catch-all for unspecified types
         else:
             return "unknown"
 

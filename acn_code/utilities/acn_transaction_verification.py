@@ -56,6 +56,9 @@ class ACNTransactionHandler:
         
         # Step 3: Additional verification criteria (e.g., tithe minimums, timestamp validity)
         verification_result = self._verify_submission_criteria(member_id, amount, memo_data)
+
+        if "COLLABORATION_RITUAL" in memo_data:
+        logging.info(f"Collaboration ritual detected: {memo_data}")
         
         # Update verification status in the database
         self._update_verification_status(verification_result, member_id, timestamp)
@@ -102,13 +105,21 @@ class ACNTransactionHandler:
         if "TITHE_SUBMISSION" in memo_data and amount < 10:  # Minimum tithe set at 10 units
             return {"status": "unverified", "reason": "Tithe amount below minimum"}
         
-        # Example criteria: valid ritual submission format
+        # Check for ritual submissions
         if "RITUAL_SUBMISSION" in memo_data:
             ritual_id = self._extract_ritual_id(memo_data)
-            if not self._is_valid_ritual(ritual_id, member_id):
-                return {"status": "unverified", "reason": "Invalid ritual submission"}
-        
-        return {"status": "verified"}
+        if not self._is_valid_ritual(ritual_id, member_id):
+            return {"status": "unverified", "reason": "Invalid ritual submission"}
+
+        # Collaboration rituals with specific types
+        if "COLLABORATION_RITUAL:TYPE1" in memo_data:
+            return {"status": "verified", "reason": "Collaboration ritual Type 1 verified"}
+        elif "COLLABORATION_RITUAL:TYPE2" in memo_data:
+            return {"status": "verified", "reason": "Collaboration ritual Type 2 verified"}
+        elif "COLLABORATION_RITUAL" in memo_data:
+            return {"status": "verified", "reason": "General collaboration ritual verified"}
+
+    return {"status": "verified"}
     
     def _extract_ritual_id(self, memo_data):
         """
