@@ -1,0 +1,3 @@
+,datetime,memo_type,memo_data,memo_format,most_recent_status,requires_work
+0,2024-11-05 10:00:00,REQUEST_1,REQUEST_ACN_COLLAB ___ Want to collaborate on docs,user1,ACCEPTANCE ___ Will collaborate on docs,False
+1,2024-11-05 11:00:00,REQUEST_2,REQUEST_ACN_COLLAB ___ UI collaboration needed,user2,REQUEST_ACN_COLLAB ___ UI collaboration needed,True

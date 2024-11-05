@@ -280,3 +280,27 @@ def phase_1_a__n_collab_generator(self, requesting_full_user_context, full_targe
         'full_api_output': full_copy_df, 
         'n_collab_output': output_string
     }
+
+    def convert_all_node_memo_transactions_to_required_collab_generation(self, all_node_memo_transactions):
+    """
+    Takes all memo transactions and identifies collaboration requests that need processing
+    
+    Input:
+    all_node_memo_transactions = self.generic_acn_utilities.get_memo_detail_df_for_account(account_address=self.node_address, pft_only=False).copy()
+    """
+    # Get the most recent memo for each memo_type (keeps track of latest status of each request)
+    most_recent_memo = all_node_memo_transactions.sort_values('datetime').groupby('memo_type').last()['memo_data']
+    
+    # Filter transactions to only get collaboration requests
+    collab_request_cue = all_node_memo_transactions[all_node_memo_transactions['memo_data'].apply(lambda x: 
+                                                             'REQUEST_ACN_COLLAB' in x)].sort_values('datetime')
+    
+    # For each request, look up its most recent status from most_recent_memo
+    collab_request_cue['most_recent_status'] = collab_request_cue['memo_type'].map(most_recent_memo)
+    
+    # Mark as requiring work if latest status still shows as a request
+    collab_request_cue['requires_work'] = collab_request_cue['most_recent_status'].apply(lambda x: 'REQUEST_ACN_COLLAB' in x)
+    
+    return collab_request_cue
+
+    
