@@ -150,20 +150,133 @@ class ACNTaskManagement:
     consolidated_generation_cue_df = pd.concat([acn_generation_cue_df, pft_generation_cue_df]).reset_index(drop=True)
 
     return consolidated_generation_cue_df
+   
+def create_multiple_copies_of_df(self, df, n_copies):
+        """
+        Create multiple copies of a dataframe and add a unique index column.
+        Args:
+        df (pd.DataFrame): Input dataframe
+        n_copies (int): Number of copies to create
+        Returns:
+        pd.DataFrame: Concatenated dataframe with unique index column
+        """
+        copies = [df.copy() for _ in range(n_copies)]
+        result = pd.concat(copies, ignore_index=True)
+        result['unique_index'] = range(len(result))
+        return result
 
-def phase_1_a__initial_collaboration_generation_api_args(self,full_user_context_replace,
-                                                    user_request='I want something related to the Accelerando Church'):
-        context_augment  = f'''<THE USER SPECIFIC COLLABORATION REQUEST STARTS HERE>
-        {user_request}
-        <THE USER SPECIFIC COLLABORATION REQUEST ENDS HERE>'''
-        full_augmented_context=full_user_context_replace+context_augment
-        api_args = {
-            "model": self.default_model,
-            "messages": [
-                {"role": "system", "content": collaboration_generation.phase_1_a__system},
-                {"role": "user", "content": collaboration_generation.phase_1_a__user.replace('___FULL_USER_CONTEXT_REPLACE___',full_augmented_context)}
-            ]}
-        return api_args
+def parse_collab_request(self, user_request):
+    """
+    Parses a collaboration request to extract target user and request details.
+    Returns target user identifier and cleaned request.
+    """
+    # You'd implement logic here to extract user identifier
+    # This is just an example pattern
+    return target_user_id, cleaned_request
+
+def get_user_context(self, user_id):
+    """
+    Looks up user's address from database and gets their full context
+    """
+    # Look up in database
+    user_address = self.db_connection_manager.get_user_address(user_id)
+    # Get context using existing utilities
+    return self.generic_acn_utilities.get_full_user_context_string(account_address=user_address)
+
+def handle_collab_request(self, requesting_full_user_context, user_request):
+    """
+    Main handler for collaboration requests
+    """
+    # Parse the request
+    target_user_id, cleaned_request = self.parse_collab_request(user_request)
     
+    # Get target user's context
+    full_target_user_context = self.get_user_context(target_user_id)
+    
+    # Generate collaboration suggestions
+    return self.phase_1_a__n_collab_generator(
+        requesting_full_user_context=requesting_full_user_context,  # Fixed
+        full_target_user_context=full_target_user_context,
+        user_request=cleaned_request
+    )
 
+def phase_1_a__initial_collab_generation_api_args(self, requesting_full_user_context, full_target_user_context,
+                                                 user_request='I want to help Visc with something related to the Accelerando Church'):
+    """ 
+    Creates API arguments for collaboration generation, considering both users' contexts.
+    
+    Parameters:
+    requesting_full_user_context: Context of the requesting user
+    full_target_user_context: Context of the user they want to collaborate with
+    user_request: The specific collaboration request (defaults to ACN-related)
+    
+    Example:
+    account_address = 'r3UHe45BzAVB3ENd21X9LeQngr4ofRJo5n'
+    requesting_full_user_context = self.generic_acn_utilities.get_full_user_context_string(account_address=account_address)
+    full_target_user_context = self.generic_acn_utilities.get_full_user_context_string(account_address=target_address)
+    """ 
+    context_augment = f'''<THE USER SPECIFIC COLLABORATION REQUEST STARTS HERE>
+    {user_request}
+    <THE USER SPECIFIC COLLABORATION REQUEST ENDS HERE>
+    
+    <TARGET USER CONTEXT STARTS HERE>
+    {full_target_user_context}
+    <TARGET USER CONTEXT ENDS HERE>'''
+    
+    full_augmented_context = requesting_full_user_context + context_augment
+    
+    api_args = {
+        "model": self.default_model,
+        "messages": [
+            {"role": "system", "content": collaboration_generation.phase_1_a__system},
+            {"role": "user", "content": collaboration_generation.phase_1_a__user.replace('___FULL_USER_CONTEXT_REPLACE___', full_augmented_context)}
+        ]}
+    return api_args
 
+def phase_1_a__n_collab_generator(self, requesting_full_user_context, full_target_user_context, 
+                                 user_request, n_copies):
+    """
+    Generates multiple collab suggestions considering both users' contexts.
+    
+    Parameters:
+    requesting_full_user_context (str): Context/history of user requesting the collab
+    full_target_user_context (str): Context/history of user they want to collab with
+    user_request (str): Specific collab request
+    n_copies (int): Number of collab variations to generate
+    """
+    # Combine contexts and request for API
+    user_api_arg = self.phase_1_a__initial_collab_generation_api_args(
+        requesting_full_user_context=requesting_full_user_context,
+        full_target_user_context=full_target_user_context,
+        user_request=user_request
+    )
+    
+    # Create copies for multiple collab generation
+    copy_frame = pd.DataFrame([[user_api_arg]])
+    copy_frame.columns = ['api_args']
+    full_copy_df = self.create_multiple_copies_of_df(df=copy_frame, n_copies=n_copies)
+    
+    # Generate collabs through async API calls
+    async_dict_to_work = full_copy_df.set_index('unique_index')['api_args'].to_dict()
+    output = self.openai_request_tool.create_writable_df_for_async_chat_completion(arg_async_map=async_dict_to_work)
+    
+    result_map = output[['internal_name','choices__message__content']].groupby('internal_name').first()['choices__message__content']
+    full_copy_df['output'] = full_copy_df['unique_index'].map(result_map)
+    
+    # Extract collab details
+    full_copy_df['collab_string'] = full_copy_df['output'].apply(
+        lambda x: x.split('Final Output |')[-1:][0].split('|')[0].strip()
+    )
+    full_copy_df['value'] = full_copy_df['output'].apply(
+        lambda x: x.split('| Value of Collab |')[-1:][0].replace('|','').strip()
+    )
+    
+    full_copy_df['classification'] = 'COLLAB ' + (full_copy_df['unique_index']+1).astype(str)
+    full_copy_df['simplified_string'] = full_copy_df['collab_string'] + ' .. ' + full_copy_df['value']
+    
+    output_string = '\n'.join(list(full_copy_df['simplified_string']))
+    
+    return {
+        'full_api_output': full_copy_df, 
+        'n_collab_output': output_string
+    }
