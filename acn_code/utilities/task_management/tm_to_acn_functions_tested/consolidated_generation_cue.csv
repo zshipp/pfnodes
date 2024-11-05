@@ -1,0 +1,3 @@
+user_account,datetime,full_output,google_doc,system
+user1,2024-11-01 10:00,REQUEST_ACN_GENERATION ___ additional details,https://example.com/doc-for-user1,ACN
+user3,2024-11-01 12:00,REQUEST_POST_FIAT ___ additional details,https://example.com/doc-for-user3,PFT
