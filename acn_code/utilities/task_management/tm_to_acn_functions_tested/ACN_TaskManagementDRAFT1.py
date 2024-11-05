@@ -151,6 +151,19 @@ class ACNTaskManagement:
 
     return consolidated_generation_cue_df
 
-
+def phase_1_a__initial_collaboration_generation_api_args(self,full_user_context_replace,
+                                                    user_request='I want something related to the Accelerando Church'):
+        context_augment  = f'''<THE USER SPECIFIC COLLABORATION REQUEST STARTS HERE>
+        {user_request}
+        <THE USER SPECIFIC COLLABORATION REQUEST ENDS HERE>'''
+        full_augmented_context=full_user_context_replace+context_augment
+        api_args = {
+            "model": self.default_model,
+            "messages": [
+                {"role": "system", "content": collaboration_generation.phase_1_a__system},
+                {"role": "user", "content": collaboration_generation.phase_1_a__user.replace('___FULL_USER_CONTEXT_REPLACE___',full_augmented_context)}
+            ]}
+        return api_args
     
+
 

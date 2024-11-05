@@ -1,0 +1,5 @@
+Model,Role,Content
+gpt-3.5-turbo,system,System message for collaboration generation.
+gpt-3.5-turbo,user,"User message with context: User Context: ACN member, interested in collaboration. <THE USER SPECIFIC COLLABORATION REQUEST STARTS HERE>
+        I want to discuss a project with the Accelerando Church.
+        <THE USER SPECIFIC COLLABORATION REQUEST ENDS HERE>."
