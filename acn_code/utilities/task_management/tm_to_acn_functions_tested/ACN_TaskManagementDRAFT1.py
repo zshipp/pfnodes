@@ -303,4 +303,47 @@ def phase_1_a__n_collab_generator(self, requesting_full_user_context, full_targe
     
     return collab_request_cue
 
+    def setup_acn_user(self, account_seed, google_doc_link, username):
+    """ 
+        PFN name of this function was "discover_server__initiation_rite"
+        EXAMPLE:
+        account_seed = 'sEdSqchDCHj29NoRhcsZ8EQfbAkbBJ2'
+        google_doc_link='https://docs.google.com/document/d/1M7EW9ocKDnbnSZ1Xa5FanfhRbteVJYV-iNOsvj5bGf4/edit'
+        username = 'acn_user'
+    """ 
+    error_string = '' 
+    wallet = self.generic_acn_utilities.spawn_user_wallet_from_seed(seed=account_seed)
+    account_address = wallet.classic_address
+
+    # Check existing google docs
+    all_account_transactions = self.generic_acn_utilities.get_memo_detail_df_for_account(account_address=self.node_address, pft_only=False)
+    all_google_docs = all_account_transactions[all_account_transactions['memo_type'].apply(lambda x: 'google_doc_context_link' in x) 
+    & (all_account_transactions['user_account'] == account_address)][['memo_type','memo_data','memo_format','user_account']]
     
+    google_doc = ''
+    if len(all_google_docs)>0:
+        google_doc_row = all_google_docs.tail(1)
+        google_doc = list(google_doc_row['memo_data'])[0]
+        print(f'Already has a google doc: {google_doc}')
+    
+    if google_doc == '':
+        print('sending google doc')
+        balance = self.generic_acn_utilities.check_if_there_is_funded_account_at_front_of_google_doc(google_url=google_doc_link)
+        print(f'XRPL balance is {balance}')
+        if balance <=12:
+            error_string = error_string+'Insufficient XRP Balance'
+        if balance>12:
+            google_memo = self.generic_acn_utilities.construct_standardized_xrpl_memo(
+                memo_data=google_doc_link, 
+                memo_format=username, 
+                memo_type='google_doc_context_link'
+            )
+            self.generic_pft_utilities.send_PFT_with_info(
+                sending_wallet=wallet, 
+                amount=1, 
+                destination_address=self.node_address, 
+                memo=google_memo
+            )
+            error_string = self.generic_acn_utilities.extract_transaction_info_from_response_object(xo)['clean_string']
+    
+    return error_string
