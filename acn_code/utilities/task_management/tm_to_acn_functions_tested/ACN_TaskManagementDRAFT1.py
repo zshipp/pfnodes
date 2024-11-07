@@ -347,3 +347,24 @@ def phase_1_a__n_collab_generator(self, requesting_full_user_context, full_targe
             error_string = self.generic_acn_utilities.extract_transaction_info_from_response_object(xo)['clean_string']
     
     return error_string
+
+     def discord__send_acn_collab_request(self, user_request, user_name, seed):
+        """
+        user_request = 'I want to collab with barry'
+        user_name = '.goodalexander'
+        seed = 's____S'
+        """ 
+        task_id = self.generic_acn_utilities.generate_custom_id()
+        full_memo_string = 'REQUEST_ACCELERANDO_CHURCH_COLLAB ___ '+user_request
+        memo_type= task_id
+        memo_format = user_name
+        xmemo_to_send = self.generic_acn_utilities.construct_standardized_xrpl_memo(memo_data=full_memo_string, 
+                                                                    memo_type=memo_type,
+                                                                    memo_format=memo_format)
+        sending_wallet = self.generic_acn_utilities.spawn_user_wallet_from_seed(seed)
+        op_response = self.generic_acn_utilities.send_PFT_with_info(sending_wallet=sending_wallet,
+            amount=1,
+            memo=xmemo_to_send,
+            destination_address=self.generic_acn_utilities.node_address,
+            url=None)
+        return op_response 
