@@ -367,4 +367,50 @@ def phase_1_a__n_collab_generator(self, requesting_full_user_context, full_targe
             memo=xmemo_to_send,
             destination_address=self.generic_acn_utilities.node_address,
             url=None)
-        return op_response 
+        return op_response
+
+    def discord__task_acceptance(self, seed_to_work, user_name, task_id_to_accept, acceptance_string):
+    """ 
+    EXAMPLE PARAMS
+    seed_to_work = 's___'
+    user_name = '.goodalexander'
+    task_id_to_accept = '2024-08-17_17:57__TO94'
+    acceptance_string = "I will get this done as soon as I am able" 
+    """
+    # Spawn wallet from the given seed
+    wallet = self.generic_acn_utilities.spawn_user_wallet_from_seed(seed=seed_to_work)
+    wallet_address = wallet.classic_address
+
+    # Get transaction details for the account and filter outstanding tasks
+    all_wallet_transactions = self.generic_acn_utilities.get_memo_detail_df_for_account(wallet_address).copy()
+    pf_df = self.generic_acn_utilities.convert_all_account_info_into_outstanding_task_df(account_memo_detail_df=all_wallet_transactions)
+    
+    # Check if the task ID is valid and outstanding
+    valid_task_ids_to_accept = list(pf_df[pf_df['acceptance'] == ''].index)
+    if task_id_to_accept in valid_task_ids_to_accept:
+        print('valid task ID proceeding to accept')
+        
+        # Prepare memo for task acceptance
+        formatted_acceptance_string = 'ACCEPTANCE REASON ___ ' + acceptance_string
+        acceptance_memo = self.generic_acn_utilities.construct_standardized_xrpl_memo(
+            memo_data=formatted_acceptance_string, 
+            memo_format=user_name, 
+            memo_type=task_id_to_accept
+        )
+        
+        # Send transaction with memo
+        acceptance_response = self.generic_acn_utilities.send_PFT_with_info(
+            sending_wallet=wallet, 
+            amount=1, 
+            memo=acceptance_memo, 
+            destination_address=self.generic_acn_utilities.node_address
+        )
+        
+        # Extract and return transaction information
+        transaction_info = self.generic_acn_utilities.extract_transaction_info_from_response_object(acceptance_response)
+        output_string = transaction_info['clean_string']
+    else:
+        print('task ID already accepted or not valid')
+        output_string = 'task ID already accepted or not valid'
+    
+    return output_string
