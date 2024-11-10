@@ -414,3 +414,74 @@ def phase_1_a__n_collab_generator(self, requesting_full_user_context, full_targe
         output_string = 'task ID already accepted or not valid'
     
     return output_string
+
+    def discord__initial_collab_submission(self, seed_to_work, user_name, collab_id_to_submit, initial_completion_string):
+    """
+    seed_to_work = ___
+    user_name = '.goodalexander'
+    collab_id_to_submit = '2024-07-01_15:11__CR11'  # Updated ID format to reflect collaboration
+    """
+    wallet = self.generic_acn_utilities.spawn_user_wallet_from_seed(seed=seed_to_work)
+    wallet_address = wallet.classic_address
+    all_wallet_transactions = self.generic_acn_utilities.get_memo_detail_df_for_account(wallet_address).copy()
+    pf_df = self.generic_acn_utilities.convert_all_account_info_into_outstanding_task_df(account_memo_detail_df=all_wallet_transactions)
+
+    valid_collab_ids_to_submit_for_completion = list(pf_df[pf_df['acceptance'] != ''].index)
+    if collab_id_to_submit in valid_collab_ids_to_submit_for_completion:
+        print('valid collaboration ID proceeding to submit for completion')
+        formatted_completed_justification_string = 'COLLAB COMPLETION JUSTIFICATION ___ ' + initial_completion_string
+        completion_memo = self.generic_acn_utilities.construct_standardized_xrpl_memo(
+            memo_data=formatted_completed_justification_string, 
+            memo_format=user_name, 
+            memo_type=collab_id_to_submit
+        )
+        completion_response = self.generic_acn_utilities.send_PFT_with_info(
+            sending_wallet=wallet, 
+            amount=1, 
+            memo=completion_memo, 
+            destination_address=self.node_address
+        )
+        transaction_info = self.generic_acn_utilities.extract_transaction_info_from_response_object(completion_response)
+        output_string = transaction_info['clean_string']
+    else:
+        print('collab ID has not been accepted or is not present')
+        output_string = 'collab ID has not been accepted or is not present'
+        
+    return output_string
+
+def discord__collab_refusal(self, seed_to_work, user_name, collab_id_to_refuse, refusal_string):
+    """
+    Refuses a specified collaboration request if the collaboration ID is valid.
+    Example Parameters:
+    seed_to_work = '___S'
+    user_name = '.goodalexander'
+    collab_id_to_refuse = '2024-08-17_17:57__CO94'
+    refusal_string = "I cannot participate in this collaboration at this time."
+    """
+    wallet = self.generic_acn_utilities.spawn_user_wallet_from_seed(seed=seed_to_work)
+    wallet_address = wallet.classic_address
+    all_wallet_transactions = self.generic_acn_utilities.get_memo_detail_df_for_account(wallet_address).copy()
+    pf_df = self.generic_acn_utilities.convert_all_account_info_into_outstanding_task_df(account_memo_detail_df=all_wallet_transactions)
+    valid_collab_ids_to_refuse = list(pf_df.index)
+
+    if collab_id_to_refuse in valid_collab_ids_to_refuse:
+        print('Valid collaboration ID proceeding to refuse')
+        formatted_refusal_string = 'COLLAB REFUSAL REASON ___ ' + refusal_string
+        refusal_memo = self.generic_acn_utilities.construct_standardized_xrpl_memo(
+            memo_data=formatted_refusal_string, 
+            memo_format=user_name, 
+            memo_type=collab_id_to_refuse
+        )
+        refusal_response = self.generic_acn_utilities.send_PFT_with_info(
+            sending_wallet=wallet, 
+            amount=1, 
+            memo=refusal_memo, 
+            destination_address=self.node_address
+        )
+        transaction_info = self.generic_acn_utilities.extract_transaction_info_from_response_object(refusal_response)
+        output_string = transaction_info['clean_string']
+    else:
+        print('Collab ID already accepted or not valid')
+        output_string = 'Collab ID already accepted or not valid'
+        
+    return output_string
