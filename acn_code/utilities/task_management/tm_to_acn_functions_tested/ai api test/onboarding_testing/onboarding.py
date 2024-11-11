@@ -2,6 +2,7 @@ import random
 from password_map_loader import PasswordMapLoader
 from acn_llm_interface import ACNLLMInterface
 from GenericACNUtilities import *
+from db_manager import DBConnectionManager
 from onboarding_prompts import (
     ac_oracle_prompt,
     ac_guardian_prompt,
@@ -23,9 +24,13 @@ class ACNode:
         self.password_loader = PasswordMapLoader()
         self.pw_map = {
             'openai': self.password_loader.get_password("OPENAI_API_KEY"),
-            'acn_node__v1xrpsecret': self.password_loader.get_password("ACN_WALLET_SEED")
+            'acn_node__v1xrpsecret': self.password_loader.get_password("ACN_WALLET_SEED"),
+            'accelerandochurch__postgresconnstring': self.password_loader.get_password("ACCELERANDOCHURCH__POSTGRESCONNSTRING")
         }
         print("Password map loaded")
+        
+        # Initialize database manager
+        self.db_connection_manager = DBConnectionManager(pw_map=self.pw_map)
         
         # Setup utilities with the password map
         self.generic_acn_utilities = GenericACNUtilities(pw_map=self.pw_map, node_name='accelerandochurch')
@@ -44,13 +49,63 @@ class ACNode:
         }
         print("Character prompts loaded")
 
+    def store_user_wallet(self, username, seed):
+        """Store user wallet details in database"""
+        try:
+            wallet = self.generic_acn_utilities.spawn_user_wallet_from_seed(seed)
+            conn = self.db_connection_manager.spawn_psycopg2_db_connection('accelerandochurch')
+            cursor = conn.cursor()
+            
+            try:
+                cursor.execute("""
+                    INSERT INTO acn_user_wallets (username, wallet_address, wallet_seed)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (username) DO UPDATE 
+                    SET wallet_address = EXCLUDED.wallet_address,
+                        wallet_seed = EXCLUDED.wallet_seed;
+                """, (username, wallet.classic_address, seed))
+                
+                conn.commit()
+                print(f"Wallet stored/updated for {username}")
+                return wallet
+            finally:
+                cursor.close()
+                conn.close()
+                
+        except Exception as e:
+            raise Exception(f"Failed to store wallet: {str(e)}")
+
+    def get_user_wallet(self, username):
+        """Retrieve user wallet from database"""
+        try:
+            conn = self.db_connection_manager.spawn_psycopg2_db_connection('accelerandochurch')
+            cursor = conn.cursor()
+            
+            try:
+                cursor.execute("SELECT wallet_seed FROM acn_user_wallets WHERE username = %s", (username,))
+                result = cursor.fetchone()
+                
+                if not result:
+                    raise ValueError(f"No wallet found for user {username}")
+                
+                seed = result[0]
+                return self.generic_acn_utilities.spawn_user_wallet_from_seed(seed)
+            finally:
+                cursor.close()
+                conn.close()
+                
+        except Exception as e:
+            raise Exception(f"Failed to retrieve wallet: {str(e)}")
+
     def process_ac_offering_request(self, user_seed, offering_statement, username):
-        """
-        Handles initial offering request.
-        """
+        """Handles initial offering request."""
         try:
             print("\nProcessing initial offering request...")
             user_wallet = self.generic_acn_utilities.spawn_user_wallet_from_seed(user_seed)
+            
+            # Store wallet for future use
+            self.store_user_wallet(username, user_seed)
+            
             offering_memo = self.generic_acn_utilities.construct_standardized_xrpl_memo(
                 memo_data=offering_statement, 
                 memo_format=username,
@@ -77,13 +132,12 @@ class ACNode:
             print(error_msg)
             return f"The Church's mechanisms falter: {error_msg}"
 
-    def process_ac_offering_transaction(self, user_seed, offering_amount, username):
-        """
-        Handles the actual PFT offering.
-        """
+    def process_ac_offering_transaction(self, username, offering_amount):
+        """Handles the actual PFT offering using stored wallet."""
         try:
             print("\nProcessing main offering transaction...")
-            user_wallet = self.generic_acn_utilities.spawn_user_wallet_from_seed(user_seed)
+            user_wallet = self.get_user_wallet(username)
+            
             offering_memo = self.generic_acn_utilities.construct_standardized_xrpl_memo(
                 memo_data=f"PFT_OFFERING:{offering_amount}",
                 memo_format=username,
@@ -98,7 +152,6 @@ class ACNode:
             )
             
             context = self._determine_context(offering_amount)
-            
             ai_response = self.generate_ac_character_response(
                 context=context,
                 offering_statement=str(offering_amount),
@@ -139,9 +192,7 @@ class ACNode:
             return "INSANE_OFFERING"
 
     def generate_ac_character_response(self, context, offering_statement, username):
-        """
-        Generates character response using LLM interface with context-based prompts.
-        """
+        """Generates character response using LLM interface with context-based prompts."""
         if context == "NO_OFFERING":
             user_prompt = ac_no_offering_prompt
         elif context == "STANDARD_OFFERING":
@@ -178,24 +229,22 @@ class ACNode:
         return response_df['choices__message__content'].iloc[0]
 
 def live_blockchain_test():
-    """
-    Test function to run real mainnet transactions
-    """
+    """Test function to run real mainnet transactions"""
     try:
         print("\n=== Starting Live Blockchain Test ===")
         
         # Initialize ACNode
         node = ACNode()
         
-        # Use your test wallet seed
+        # First time only - need seed to store wallet
         test_wallet_seed = input("Enter your test wallet seed: ")
         test_username = "test_pilgrim"
         
-        # Test initial offering request (1 PFT)
+        # Test initial offering request (1 PFT) - this will also store the wallet
         print("\nTesting initial offering request...")
         offering_statement = "I humbly seek the wisdom of Accelerando."
         response = node.process_ac_offering_request(
-            user_seed=test_wallet_seed,
+            user_seed=test_wallet_seed,  # Only needed first time
             offering_statement=offering_statement,
             username=test_username
         )
@@ -203,13 +252,12 @@ def live_blockchain_test():
         
         proceed = input("\nInitial request successful. Proceed with main offering? (y/n): ")
         if proceed.lower() == 'y':
-            # Test small offering transaction (2 PFT)
+            # Future transactions just need username
             print("\nTesting offering transaction...")
             offering_amount = 2  # Small test amount
             response = node.process_ac_offering_transaction(
-                user_seed=test_wallet_seed,
-                offering_amount=offering_amount,
-                username=test_username
+                username=test_username,  # No seed needed, using stored wallet
+                offering_amount=offering_amount
             )
             print("\nOffering Transaction Response:", response)
         
