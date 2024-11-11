@@ -1,5 +1,5 @@
-import binascii
 import xrpl
+import binascii
 from xrpl.wallet import Wallet
 from xrpl.clients import JsonRpcClient
 from xrpl.models.transactions import Payment, Memo
@@ -7,6 +7,8 @@ from xrpl.models.amounts import IssuedCurrencyAmount
 from xrpl.utils import xrp_to_drops
 import json
 import datetime
+import nest_asyncio
+nest_asyncio.apply()
 
 class GenericACNUtilities:
     def __init__(self, pw_map, node_name='accelerandochurch'):
@@ -20,7 +22,7 @@ class GenericACNUtilities:
         # Initialize client with error handling
         try:
             self.client = JsonRpcClient(self.mainnet_url)
-            # Test connection
+            # Test connection - this should now work with nest_asyncio
             self.client.request(xrpl.models.requests.ServerInfo())
             print(f"Connected to XRPL mainnet at {self.mainnet_url}")
         except Exception as e:
@@ -41,6 +43,7 @@ class GenericACNUtilities:
                 print("Warning: No PFT trust line found for node wallet")
         except Exception as e:
             print(f"Trust line verification failed: {str(e)}")
+
 
     def _verify_trust_line(self):
         """Verify PFT trust line exists for node wallet"""
