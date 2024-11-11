@@ -19,22 +19,21 @@ class ACNode:
     ACN_WALLET_ADDRESS = "rpb7dex8DMLRXunDcTbbQeteCCYcyo9uSd"
 
     def __init__(self):
-        print("Initializing ACNode...")  # Debug print
         # Setup password map and get sensitive info
         self.password_loader = PasswordMapLoader()
         self.pw_map = {
             'openai': self.password_loader.get_password("OPENAI_API_KEY"),
             'acn_node__v1xrpsecret': self.password_loader.get_password("ACN_WALLET_SEED")
         }
-        print("Password map loaded")  # Debug print
+        print("Password map loaded")
         
         # Setup utilities with the password map
         self.generic_acn_utilities = GenericACNUtilities(pw_map=self.pw_map, node_name='accelerandochurch')
-        print("Generic utilities initialized")  # Debug print
+        print("Generic utilities initialized")
         
         # Setup LLM interface
         self.llm_interface = ACNLLMInterface(self.pw_map)
-        print("LLM interface initialized")  # Debug print
+        print("LLM interface initialized")
         
         # Setup character prompts
         self.character_prompts = {
@@ -43,13 +42,14 @@ class ACNode:
             "priest": ac_priest_prompt,
             "zealot": ac_zealot_prompt
         }
-        print("Character prompts loaded")  # Debug print
+        print("Character prompts loaded")
 
     def process_ac_offering_request(self, user_seed, offering_statement, username):
         """
         Handles initial offering request.
         """
         try:
+            print("\nProcessing initial offering request...")
             user_wallet = self.generic_acn_utilities.spawn_user_wallet_from_seed(user_seed)
             offering_memo = self.generic_acn_utilities.construct_standardized_xrpl_memo(
                 memo_data=offering_statement, 
@@ -82,6 +82,7 @@ class ACNode:
         Handles the actual PFT offering.
         """
         try:
+            print("\nProcessing main offering transaction...")
             user_wallet = self.generic_acn_utilities.spawn_user_wallet_from_seed(user_seed)
             offering_memo = self.generic_acn_utilities.construct_standardized_xrpl_memo(
                 memo_data=f"PFT_OFFERING:{offering_amount}",
@@ -174,42 +175,43 @@ class ACNode:
         }
         
         response_df = self.llm_interface.query_chat_completion_and_write_to_db(api_args)
-        
         return response_df['choices__message__content'].iloc[0]
 
-def mock_blockchain_test():
+def live_blockchain_test():
     """
-    Test function to run a mock transaction through the system
+    Test function to run real mainnet transactions
     """
     try:
-        print("\n=== Starting Mock Blockchain Test ===")
+        print("\n=== Starting Live Blockchain Test ===")
         
         # Initialize ACNode
         node = ACNode()
         
-        # Test values
-        test_user_seed = "sTestUserSeedXXXXXXXXXXXXXXXXXXXX"
+        # Use your test wallet seed
+        test_wallet_seed = input("Enter your test wallet seed: ")
         test_username = "test_pilgrim"
         
-        # Test initial offering request
+        # Test initial offering request (1 PFT)
         print("\nTesting initial offering request...")
         offering_statement = "I humbly seek the wisdom of Accelerando."
         response = node.process_ac_offering_request(
-            user_seed=test_user_seed,
+            user_seed=test_wallet_seed,
             offering_statement=offering_statement,
             username=test_username
         )
         print("\nOffering Request Response:", response)
         
-        # Test offering transaction
-        print("\nTesting offering transaction...")
-        offering_amount = 500  # Test with 500 PFT
-        response = node.process_ac_offering_transaction(
-            user_seed=test_user_seed,
-            offering_amount=offering_amount,
-            username=test_username
-        )
-        print("\nOffering Transaction Response:", response)
+        proceed = input("\nInitial request successful. Proceed with main offering? (y/n): ")
+        if proceed.lower() == 'y':
+            # Test small offering transaction (2 PFT)
+            print("\nTesting offering transaction...")
+            offering_amount = 2  # Small test amount
+            response = node.process_ac_offering_transaction(
+                user_seed=test_wallet_seed,
+                offering_amount=offering_amount,
+                username=test_username
+            )
+            print("\nOffering Transaction Response:", response)
         
     except Exception as e:
         print(f"\nERROR: {str(e)}")
@@ -217,6 +219,4 @@ def mock_blockchain_test():
         print(traceback.format_exc())
 
 if __name__ == "__main__":
-    mock_blockchain_test()
-
-
+    live_blockchain_test()
