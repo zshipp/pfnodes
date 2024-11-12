@@ -14,7 +14,8 @@ class GenericACNUtilities:
     def __init__(self, pw_map, node_name='accelerandochurch'):
         self.pw_map = pw_map
         self.pft_issuer = 'rnQUEEg8yyjrwk9FhyXpKavHyCRJM9BDMW'
-        self.mainnet_url = "https://xrplcluster.com"  # Keeping your existing URL
+        self.mainnet_url = "https://xrplcluster.com"  # Primary server
+        self.public_rpc_url = "https://s2.ripple.com:51234"  # Backup server
         self.node_name = node_name
         self.node_address = "rpb7dex8DMLRXunDcTbbQeteCCYcyo9uSd"
         self.node_seed = self.pw_map['acn_node__v1xrpsecret']
