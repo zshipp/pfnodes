@@ -3,6 +3,8 @@ from password_map_loader import PasswordMapLoader
 from acn_llm_interface import ACNLLMInterface
 from GenericACNUtilities import *
 from db_manager import DBConnectionManager
+import nest_asyncio
+nest_asyncio.apply()
 from onboarding_prompts import (
     ac_oracle_prompt,
     ac_guardian_prompt,
@@ -48,6 +50,92 @@ class ACNode:
             "zealot": ac_zealot_prompt
         }
         print("Character prompts loaded")
+
+    def check_user_offering_status(self, username):
+        """Check if user has made a successful offering"""
+        try:
+            conn = self.db_connection_manager.spawn_psycopg2_db_connection('accelerandochurch')
+            cursor = conn.cursor()
+            
+            try:
+                # Check for successful offerings > 0 PFT
+                cursor.execute("""
+                    SELECT COUNT(*) 
+                    FROM acn_discord_interactions 
+                    WHERE discord_user_id = %s 
+                    AND interaction_type = 'offer' 
+                    AND amount > 0 
+                    AND success = true
+                """, (username,))
+                
+                has_offering = cursor.fetchone()[0] > 0
+                
+                # Get stored wallet if exists
+                cursor.execute("""
+                    SELECT wallet_seed 
+                    FROM acn_user_wallets 
+                    WHERE username = %s
+                """, (username,))
+                
+                wallet_info = cursor.fetchone()
+                has_wallet = wallet_info is not None
+                stored_seed = wallet_info[0] if wallet_info else None
+                
+                return {
+                    'has_offering': has_offering,
+                    'has_wallet': has_wallet,
+                    'stored_seed': stored_seed
+                }
+                
+            finally:
+                cursor.close()
+                conn.close()
+                
+        except Exception as e:
+            raise Exception(f"Failed to check user status: {str(e)}")
+
+    def process_ac_offering_request(self, user_seed, offering_statement, username, is_returning=False):
+        """Enhanced offering request handler that considers returning users"""
+        try:
+            # Get or create user wallet
+            if is_returning:
+                user_status = self.check_user_offering_status(username)
+                if not user_status['has_wallet']:
+                    raise Exception("No existing wallet found. Please initiate with your seed.")
+                user_seed = user_status['stored_seed']
+            
+            user_wallet = self.generic_acn_utilities.spawn_user_wallet_from_seed(user_seed)
+            
+            # Store wallet for new users
+            if not is_returning:
+                self.store_user_wallet(username, user_seed)
+            
+            offering_memo = self.generic_acn_utilities.construct_standardized_xrpl_memo(
+                memo_data=offering_statement, 
+                memo_format=username,
+                memo_type='AC_OFFERING_REQUEST_RETRY' if is_returning else 'AC_OFFERING_REQUEST'
+            )
+            
+            self.generic_acn_utilities.send_PFT_with_info(
+                sending_wallet=user_wallet,
+                amount=1,
+                destination_address=self.ACN_WALLET_ADDRESS,
+                memo=offering_memo
+            )
+            
+            # Generate appropriate AI response
+            ai_response = self.generate_ac_character_response(
+                context="OFFERING_REQUEST_RETRY" if is_returning else "OFFERING_REQUEST",
+                offering_statement=offering_statement,
+                username=username
+            )
+            
+            return ai_response
+            
+        except Exception as e:
+            error_msg = f"Error processing offering request: {str(e)}"
+            print(error_msg)
+            return f"The Church's mechanisms falter: {error_msg}"
 
     def store_user_wallet(self, username, seed):
         """Store user wallet details in database"""
