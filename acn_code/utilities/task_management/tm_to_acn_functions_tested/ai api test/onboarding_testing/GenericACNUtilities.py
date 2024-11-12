@@ -14,21 +14,16 @@ class GenericACNUtilities:
     def __init__(self, pw_map, node_name='accelerandochurch'):
         self.pw_map = pw_map
         self.pft_issuer = 'rnQUEEg8yyjrwk9FhyXpKavHyCRJM9BDMW'
-        self.mainnet_url = "https://xrplcluster.com"  # Primary server
-        self.public_rpc_url = "https://s2.ripple.com:51234"  # Backup server
+        self.primary_url = "https://xrplcluster.com"
+        self.backup_url = "https://s2.ripple.com:51234"
+        self.mainnet_url = self.primary_url  # Start with primary
         self.node_name = node_name
         self.node_address = "rpb7dex8DMLRXunDcTbbQeteCCYcyo9uSd"
         self.node_seed = self.pw_map['acn_node__v1xrpsecret']
         
-        # Initialize client with error handling
-        try:
-            self.client = JsonRpcClient(self.mainnet_url)
-            # Test connection - this should now work with nest_asyncio
-            self.client.request(xrpl.models.requests.ServerInfo())
-            print(f"Connected to XRPL mainnet at {self.mainnet_url}")
-        except Exception as e:
-            raise Exception(f"Failed to initialize XRPL client: {str(e)}")
-            
+        # Initialize client with failover support
+        self.client = self._init_client_with_failover()
+        
         # Initialize node wallet with error handling
         try:
             self.node_wallet = self.spawn_user_wallet_from_seed(self.node_seed)
@@ -45,6 +40,28 @@ class GenericACNUtilities:
         except Exception as e:
             print(f"Trust line verification failed: {str(e)}")
 
+    def _init_client_with_failover(self):
+        """Initialize client with failover support"""
+        # Try primary first
+        try:
+            print(f"Attempting connection to primary server: {self.mainnet_url}")
+            client = JsonRpcClient(self.mainnet_url)
+            client.request(xrpl.models.requests.ServerInfo())
+            print(f"Connected successfully to primary server")
+            return client
+        except Exception as e:
+            print(f"Primary server failed: {str(e)}")
+            
+            # Try backup
+            try:
+                print(f"Attempting connection to backup server: {self.backup_url}")
+                self.mainnet_url = self.backup_url  # Switch to backup URL
+                client = JsonRpcClient(self.mainnet_url)
+                client.request(xrpl.models.requests.ServerInfo())
+                print(f"Connected successfully to backup server")
+                return client
+            except Exception as e:
+                raise Exception(f"Both primary and backup servers failed. Last error: {str(e)}")
 
     def _verify_trust_line(self):
         """Verify PFT trust line exists for node wallet"""
@@ -81,20 +98,10 @@ class GenericACNUtilities:
             print(f"Balance check failed: {str(e)}")
             return False
 
-    def log_transaction(self, tx_type, from_address, amount, result):
-        """Log transaction details"""
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f"\n=== Transaction Log {timestamp} ===")
-        print(f"Type: {tx_type}")
-        print(f"From: {from_address}")
-        print(f"Amount: {amount} PFT")
-        print(f"Result: {'SUCCESS' if result else 'FAILED'}")
-        if isinstance(result, dict):
-            print(f"Hash: {result.get('hash', 'N/A')}")
-        print("================================\n")
+    # ... rest of your existing methods stay the same ...
 
     def send_PFT_with_info(self, sending_wallet, amount, memo, destination_address):
-        """Sends PFT tokens with memo information"""
+        """Sends PFT tokens with memo information with failover support"""
         try:
             print(f"\nInitiating transaction of {amount} PFT")
             print(f"From: {sending_wallet.classic_address}")
@@ -118,14 +125,23 @@ class GenericACNUtilities:
                 memos=[memo]
             )
 
-            # Submit and wait
-            print("Submitting transaction...")
-            response = xrpl.transaction.submit_and_wait(
-                payment, 
-                self.client, 
-                sending_wallet,
-                check_fee=True
-            )
+            # Submit with retry on failure
+            try:
+                response = xrpl.transaction.submit_and_wait(
+                    payment, 
+                    self.client, 
+                    sending_wallet,
+                    check_fee=True
+                )
+            except Exception as e:
+                print(f"Transaction failed on primary server, trying backup...")
+                self.client = self._init_client_with_failover()  # Try failover
+                response = xrpl.transaction.submit_and_wait(
+                    payment, 
+                    self.client, 
+                    sending_wallet,
+                    check_fee=True
+                )
             
             result = response.result
             success = result.get("validated", False)
