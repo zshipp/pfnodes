@@ -98,7 +98,25 @@ class GenericACNUtilities:
             print(f"Balance check failed: {str(e)}")
             return False
 
-    # ... rest of your existing methods stay the same ...
+    def log_transaction(self, tx_type, sender, amount, result):
+        """Log XRPL transaction details"""
+        try:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_entry = {
+                'timestamp': timestamp,
+                'type': tx_type,
+                'sender': sender,
+                'amount': amount,
+                'result': result
+            }
+            print(f"Transaction Log [{timestamp}]: {tx_type} | From: {sender} | Amount: {amount} PFT")
+            if result:
+                print(f"Hash: {result.get('hash', 'N/A')}")
+                print(f"Status: {result.get('validated', False)}")
+            
+            return log_entry
+        except Exception as e:
+            print(f"Failed to log transaction: {str(e)}")
 
     def send_PFT_with_info(self, sending_wallet, amount, memo, destination_address):
         """Sends PFT tokens with memo information with failover support"""

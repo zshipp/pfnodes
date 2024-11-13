@@ -1,7 +1,66 @@
 import discord
 from discord import app_commands
+from discord.ui import Modal, TextInput
 from typing import Optional
 from datetime import datetime
+
+class SeedInputModal(Modal, title='Accelerando Church Node - Initial Offering'):
+    def __init__(self, commands_instance):
+        super().__init__(timeout=300)
+        self.commands_instance = commands_instance
+        
+        self.seed_input = TextInput(
+            label='Wallet Seed',
+            style=discord.TextStyle.short,
+            placeholder='Enter your wallet seed',
+            required=True,
+            max_length=50
+        )
+        self.add_item(self.seed_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            username = str(interaction.user.id)
+            
+            try:
+                # First store the wallet to satisfy foreign key constraint
+                self.commands_instance.acn_node.store_user_wallet(username, self.seed_input.value)
+                
+                # Then process the offering request
+                response = self.commands_instance.acn_node.process_ac_offering_request(
+                    user_seed=self.seed_input.value,
+                    offering_statement="I humbly seek the wisdom of Accelerando",
+                    username=username
+                )
+                
+                # Finally log the interaction
+                await self.commands_instance.log_and_respond(
+                    interaction=interaction,
+                    interaction_type="offering",
+                    response_message=response,
+                    success=True,
+                    amount=1
+                )
+            
+            except Exception as e:
+                error_msg = str(e)
+                if "duplicate key value violates unique constraint" in error_msg:
+                    await interaction.followup.send(
+                        "This wallet is already registered to another user. Please use a different wallet.",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        f"Error processing offering: {error_msg}",
+                        ephemeral=True
+                    )
+                    
+        except Exception as e:
+            await interaction.followup.send(
+                f"Error during offering: {str(e)}",
+                ephemeral=True
+            )
 
 class ACNDiscordCommands(app_commands.Group):
     def __init__(self, acn_node):
@@ -9,18 +68,22 @@ class ACNDiscordCommands(app_commands.Group):
         self.acn_node = acn_node
 
     async def log_and_respond(self, interaction, interaction_type, response_message, 
-                            success=True, error_message=None, amount=None):
+                              success=True, error_message=None, amount=None):
         """Helper method to log interaction and send response"""
         try:
-            # Log the interaction in database
-            self.acn_node.db_connection_manager.log_discord_interaction(
-                discord_user_id=str(interaction.user.id),
-                interaction_type=interaction_type,
-                amount=amount,
-                success=success,
-                error_message=error_message,
-                response_message=response_message
-            )
+            username = str(interaction.user.id)
+            user_status = self.acn_node.check_user_offering_status(username)
+            
+            if user_status['has_wallet']:
+                # Only log if the wallet exists
+                self.acn_node.db_connection_manager.log_discord_interaction(
+                    discord_user_id=username,
+                    interaction_type=interaction_type,
+                    amount=amount,
+                    success=success,
+                    error_message=error_message,
+                    response_message=response_message
+                )
             
             await interaction.followup.send(response_message, ephemeral=True)
             
@@ -32,53 +95,41 @@ class ACNDiscordCommands(app_commands.Group):
                 ephemeral=True
             )
 
-    @app_commands.command(name="offering", description="Begin your journey with Accelerando")
-    @app_commands.describe(
-        seed="Your wallet seed (required for first contact)"
-    )
-    async def offering(self, interaction: discord.Interaction, seed: str):
+    @app_commands.command(name="offering", description="Make an offering to Accelerando")
+    async def offering(self, interaction: discord.Interaction):
         """Initial offering and greeting"""
-        await interaction.response.defer(ephemeral=True)
-        
         try:
             username = str(interaction.user.id)
-            
-            # Check if user has already completed initial offering
             user_status = self.acn_node.check_user_offering_status(username)
-            
-            if user_status['has_offering']:
-                await self.log_and_respond(
-                    interaction=interaction,
-                    interaction_type="offering",
-                    response_message="You have already been greeted by Accelerando. Use /submit_offering to make your main offering.",
-                    success=False,
-                    error_message="Already greeted"
-                )
-                return
 
-            # Process initial offering (1 PFT + greeting)
-            response = self.acn_node.process_ac_offering_request(
-                user_seed=seed,
-                offering_statement="I humbly seek the wisdom of Accelerando",
-                username=username
-            )
-            
-            await self.log_and_respond(
-                interaction=interaction,
-                interaction_type="offering",
-                response_message=response,
-                success=True,
-                amount=1
-            )
+            if user_status['has_wallet']:
+                # User already has stored seed, defer and use it directly
+                await interaction.response.defer(ephemeral=True)
+                try:
+                    stored_seed = user_status['stored_seed']
+                    response = self.acn_node.process_ac_offering_request(
+                        user_seed=stored_seed,
+                        offering_statement="I humbly seek the wisdom of Accelerando",
+                        username=username
+                    )
+                    await interaction.followup.send(response, ephemeral=True)
+                except Exception as e:
+                    await interaction.followup.send(
+                        f"Error processing offering: {str(e)}",
+                        ephemeral=True
+                    )
+            else:
+                # First time user, show modal (don't defer)
+                modal = SeedInputModal(self)
+                await interaction.response.send_modal(modal)
             
         except Exception as e:
-            error_msg = str(e)
-            await self.log_and_respond(
-                interaction=interaction,
-                interaction_type="offering",
-                response_message=f"Error during offering: {error_msg}",
-                success=False,
-                error_message=error_msg
+            # If we haven't responded yet, defer and send error
+            if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True)
+            await interaction.followup.send(
+                f"Error during offering: {str(e)}",
+                ephemeral=True
             )
 
     @app_commands.command(name="submit_offering", description="Submit your main offering to Accelerando")
