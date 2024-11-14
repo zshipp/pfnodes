@@ -4,63 +4,74 @@ from discord.ui import Modal, TextInput
 from typing import Optional
 from datetime import datetime
 
+# Modify SeedInputModal to accept a parameter that determines if seed input is required
 class SeedInputModal(Modal, title='Accelerando Church Node - Initial Offering'):
-    def __init__(self, commands_instance):
+    def __init__(self, commands_instance, require_seed=True):
         super().__init__(timeout=300)
         self.commands_instance = commands_instance
+        self.require_seed = require_seed
         
-        self.seed_input = TextInput(
-            label='Wallet Seed',
-            style=discord.TextStyle.short,
-            placeholder='Enter your wallet seed',
-            required=True,
-            max_length=50
+        # Conditionally add the wallet seed input if required
+        if self.require_seed:
+            self.seed_input = TextInput(
+                label='Wallet Seed',
+                style=discord.TextStyle.short,
+                placeholder='Enter your wallet seed',
+                required=True,
+                max_length=50
+            )
+            self.add_item(self.seed_input)
+        
+        # Reason input (always required)
+        self.reason_input = TextInput(
+            label='Why do you wish to join Accelerando?',
+            style=discord.TextStyle.long,
+            placeholder='Describe your motivation',
+            required=True
         )
-        self.add_item(self.seed_input)
+        self.add_item(self.reason_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         try:
             username = interaction.user.name
-            
-            try:
-                # First store the wallet to satisfy foreign key constraint
+            reason = self.reason_input.value
+
+            # Check if seed input was provided in this modal
+            if self.require_seed:
+                # Store the provided seed
                 self.commands_instance.acn_node.store_user_wallet(username, self.seed_input.value)
-                
-                # Then process the offering request
-                response = self.commands_instance.acn_node.process_ac_offering_request(
-                    user_seed=self.seed_input.value,
-                    offering_statement="I humbly seek the wisdom of Accelerando",
-                    username=username
-                )
-                
-                # Finally log the interaction
-                await self.commands_instance.log_and_respond(
-                    interaction=interaction,
-                    interaction_type="offering",
-                    response_message=response,
-                    success=True,
-                    amount=1
-                )
+                seed = self.seed_input.value
+            else:
+                # Retrieve the already stored seed
+                user_status = self.commands_instance.acn_node.check_user_offering_status(username)
+                seed = user_status['stored_seed']
+
+            # Process offering request including the reason
+            response = self.commands_instance.acn_node.process_ac_offering_request(
+                user_seed=seed,
+                offering_statement="I humbly seek the wisdom of Accelerando",
+                username=username,
+                reason=reason
+            )
             
-            except Exception as e:
-                error_msg = str(e)
-                if "duplicate key value violates unique constraint" in error_msg:
-                    await interaction.followup.send(
-                        "This wallet is already registered to another user. Please use a different wallet.",
-                        ephemeral=True
-                    )
-                else:
-                    await interaction.followup.send(
-                        f"Error processing offering: {error_msg}",
-                        ephemeral=True
-                    )
-                    
-        except Exception as e:
+            # Log the interaction with reason included
+            await self.commands_instance.log_and_respond(
+                interaction=interaction,
+                interaction_type="offering",
+                response_message=response,
+                success=True,
+                amount=1
+            )
+
+            # Follow-up prompt for submitting main offering
             await interaction.followup.send(
-                f"Error during offering: {str(e)}",
+                "Your greeting has been acknowledged. To proceed with a deeper commitment, use `/submit_offering` to send PFT.",
                 ephemeral=True
             )
+            
+        except Exception as e:
+            await interaction.followup.send(f"Error during offering: {str(e)}", ephemeral=True)
 
 class ACNDiscordCommands(app_commands.Group):
     def __init__(self, acn_node):
@@ -95,41 +106,19 @@ class ACNDiscordCommands(app_commands.Group):
                 ephemeral=True
             )
 
+    # Modify the offering command to check if seed input is necessary
     @app_commands.command(name="offering", description="Make an offering to Accelerando")
     async def offering(self, interaction: discord.Interaction):
-        """Initial offering and greeting"""
+        """Initial offering and greeting, displaying modal with conditional fields."""
         try:
-            username = str(interaction.user.name)
+            username = interaction.user.name
             user_status = self.acn_node.check_user_offering_status(username)
 
-            if user_status['has_wallet']:
-                # User already has stored seed, defer and use it directly
-                await interaction.response.defer(ephemeral=True)
-                try:
-                    stored_seed = user_status['stored_seed']
-                    response = self.acn_node.process_ac_offering_request(
-                        user_seed=stored_seed,
-                        offering_statement="I humbly seek the wisdom of Accelerando",
-                        username=username
-                    )
-                    await interaction.followup.send(response, ephemeral=True)
-
-                    # Follow-up prompt for submitting main offering
-                    await interaction.followup.send(
-                    "Your greeting has been acknowledged. To proceed with a deeper commitment, use `/submit_offering` to send PFT.",
-                    ephemeral=True
-                )
-
-                except Exception as e:
-                    await interaction.followup.send(
-                        f"Error processing offering: {str(e)}",
-                        ephemeral=True
-                    )
-            else:
-                # First time user, show modal (don't defer)
-                modal = SeedInputModal(self)
-                await interaction.response.send_modal(modal)
-            
+            # Show modal, asking for seed input only if the user does not have a stored seed
+            require_seed = not user_status['has_wallet']
+            modal = SeedInputModal(self, require_seed=require_seed)
+            await interaction.response.send_modal(modal)
+        
         except Exception as e:
             # If we haven't responded yet, defer and send error
             if not interaction.response.is_done():
@@ -146,7 +135,7 @@ class ACNDiscordCommands(app_commands.Group):
         await interaction.response.defer(ephemeral=True)
         
         try:
-            username = str(interaction.user.name)
+            username = interaction.user.name
             
             # Verify user has completed initial offering
             user_status = self.acn_node.check_user_offering_status(username)
@@ -191,11 +180,11 @@ class ACNDiscordCommands(app_commands.Group):
         try:
             await interaction.response.defer(ephemeral=True)
             
-            username = str(interaction.user.name)
+            username = interaction.user.name
             user_status = self.acn_node.check_user_offering_status(username)
             
             status_lines = [
-                f"Discord ID: {username}"
+                f"Discord Username: {username}"
             ]
             
             if user_status['has_wallet']:

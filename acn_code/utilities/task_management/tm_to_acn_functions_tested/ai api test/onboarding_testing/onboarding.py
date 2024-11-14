@@ -94,8 +94,8 @@ class ACNode:
         except Exception as e:
             raise Exception(f"Failed to check user status: {str(e)}")
 
-    def process_ac_offering_request(self, user_seed, offering_statement, username, is_returning=False):
-        """Enhanced offering request handler that considers returning users"""
+    def process_ac_offering_request(self, user_seed, offering_statement, username, reason=None, is_returning=False):
+        """Enhanced offering request handler that considers returning users and includes a reason for joining."""
         try:
             # Get or create user wallet
             if is_returning:
@@ -103,39 +103,74 @@ class ACNode:
                 if not user_status['has_wallet']:
                     raise Exception("No existing wallet found. Please initiate with your seed.")
                 user_seed = user_status['stored_seed']
-            
+    
             user_wallet = self.generic_acn_utilities.spawn_user_wallet_from_seed(user_seed)
-            
+    
             # Store wallet for new users
             if not is_returning:
                 self.store_user_wallet(username, user_seed)
-            
+    
+            # Construct memo with reason included if provided
+            memo_data = f"{offering_statement}. Reason: {reason}" if reason else offering_statement
             offering_memo = self.generic_acn_utilities.construct_standardized_xrpl_memo(
-                memo_data=offering_statement, 
+                memo_data=memo_data,
                 memo_format=username,
                 memo_type='AC_OFFERING_REQUEST_RETRY' if is_returning else 'AC_OFFERING_REQUEST'
             )
-            
+    
+            # Send the offering transaction
             self.generic_acn_utilities.send_PFT_with_info(
                 sending_wallet=user_wallet,
                 amount=1,
                 destination_address=self.ACN_WALLET_ADDRESS,
                 memo=offering_memo
             )
-            
-            # Generate appropriate AI response
-            ai_response = self.generate_ac_character_response(
-                context="OFFERING_REQUEST_RETRY" if is_returning else "OFFERING_REQUEST",
+    
+            # Generate initial offering AI response, including reason if provided
+            ai_response = self.generate_initial_offering_response(
                 offering_statement=offering_statement,
-                username=username
+                username=username,
+                reason=reason  # Pass reason to be included in AI response
             )
-            
+    
             return ai_response
-            
+
         except Exception as e:
             error_msg = f"Error processing offering request: {str(e)}"
             print(error_msg)
-            return f"The Church's mechanisms falter: {error_msg}"
+            return f"The Church's mechanisms falter: {error_msg}"    
+
+    def generate_initial_offering_response(self, offering_statement, username, reason=None):
+        """Generates an initial character response using the reason for joining if provided."""
+
+        # Use a specific prompt for initial offering
+        user_prompt = ac_initial_offering_prompt
+
+        # Append reason to the prompt if provided
+        if reason:
+            user_prompt += f"\nReason for joining: {reason}"
+
+        api_args = {
+            "model": "gpt-4-1106-preview",
+            "messages": [
+                {
+                    "role": "system", 
+                    "content": random.choice([
+                        ac_oracle_prompt,
+                        ac_guardian_prompt,
+                        ac_priest_prompt,
+                        ac_zealot_prompt
+                    ])
+                },
+                {
+                    "role": "user", 
+                    "content": user_prompt.replace('___USERNAME___', username).replace('___USER_OFFERING_STATEMENT___', offering_statement)
+                }
+            ]
+        }
+    
+        response_df = self.llm_interface.query_chat_completion_and_write_to_db(api_args)
+        return response_df['choices__message__content'].iloc[0]    
 
     def store_user_wallet(self, username, seed):
         """Store user wallet details in database"""
@@ -184,41 +219,6 @@ class ACNode:
                 
         except Exception as e:
             raise Exception(f"Failed to retrieve wallet: {str(e)}")
-
-    def process_ac_offering_request(self, user_seed, offering_statement, username):
-        """Handles initial offering request."""
-        try:
-            print("\nProcessing initial offering request...")
-            user_wallet = self.generic_acn_utilities.spawn_user_wallet_from_seed(user_seed)
-            
-            # Store wallet for future use
-            self.store_user_wallet(username, user_seed)
-            
-            offering_memo = self.generic_acn_utilities.construct_standardized_xrpl_memo(
-                memo_data=offering_statement, 
-                memo_format=username,
-                memo_type='AC_OFFERING_REQUEST'
-            )
-            
-            self.generic_acn_utilities.send_PFT_with_info(
-                sending_wallet=user_wallet,
-                amount=1,
-                destination_address=self.ACN_WALLET_ADDRESS,
-                memo=offering_memo
-            )
-            
-            ai_response = self.generate_ac_character_response(
-                context="OFFERING_REQUEST",
-                offering_statement=offering_statement,
-                username=username
-            )
-            
-            return ai_response
-            
-        except Exception as e:
-            error_msg = f"Error processing offering request: {str(e)}"
-            print(error_msg)
-            return f"The Church's mechanisms falter: {error_msg}"
 
     def process_ac_offering_transaction(self, username, offering_amount):
         """Handles the actual PFT offering using stored wallet."""
