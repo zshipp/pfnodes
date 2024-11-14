@@ -21,7 +21,7 @@ class SeedInputModal(Modal, title='Accelerando Church Node - Initial Offering'):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         try:
-            username = str(interaction.user.id)
+            username = interaction.user.name
             
             try:
                 # First store the wallet to satisfy foreign key constraint
@@ -71,7 +71,7 @@ class ACNDiscordCommands(app_commands.Group):
                               success=True, error_message=None, amount=None):
         """Helper method to log interaction and send response"""
         try:
-            username = str(interaction.user.id)
+            username = interaction.user.name
             user_status = self.acn_node.check_user_offering_status(username)
             
             if user_status['has_wallet']:
@@ -99,7 +99,7 @@ class ACNDiscordCommands(app_commands.Group):
     async def offering(self, interaction: discord.Interaction):
         """Initial offering and greeting"""
         try:
-            username = str(interaction.user.id)
+            username = str(interaction.user.name)
             user_status = self.acn_node.check_user_offering_status(username)
 
             if user_status['has_wallet']:
@@ -113,6 +113,13 @@ class ACNDiscordCommands(app_commands.Group):
                         username=username
                     )
                     await interaction.followup.send(response, ephemeral=True)
+
+                    # Follow-up prompt for submitting main offering
+                    await interaction.followup.send(
+                    "Your greeting has been acknowledged. To proceed with a deeper commitment, use `/submit_offering` to send PFT.",
+                    ephemeral=True
+                )
+
                 except Exception as e:
                     await interaction.followup.send(
                         f"Error processing offering: {str(e)}",
@@ -139,7 +146,7 @@ class ACNDiscordCommands(app_commands.Group):
         await interaction.response.defer(ephemeral=True)
         
         try:
-            username = str(interaction.user.id)
+            username = str(interaction.user.name)
             
             # Verify user has completed initial offering
             user_status = self.acn_node.check_user_offering_status(username)
@@ -184,7 +191,7 @@ class ACNDiscordCommands(app_commands.Group):
         try:
             await interaction.response.defer(ephemeral=True)
             
-            username = str(interaction.user.id)
+            username = str(interaction.user.name)
             user_status = self.acn_node.check_user_offering_status(username)
             
             status_lines = [
