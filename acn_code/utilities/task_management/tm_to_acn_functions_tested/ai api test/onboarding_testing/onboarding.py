@@ -21,6 +21,8 @@ from onboarding_prompts import (
 class ACNode:
     ACN_WALLET_ADDRESS = "rpb7dex8DMLRXunDcTbbQeteCCYcyo9uSd"
 
+    CHARACTERS = ["oracle", "guardian", "priest", "zealot"]
+
     def __init__(self):
         # Setup password map and get sensitive info
         self.password_loader = PasswordMapLoader()
@@ -50,6 +52,15 @@ class ACNode:
             "zealot": ac_zealot_prompt
         }
         print("Character prompts loaded")
+
+    def get_character_entry(self, character_name):
+        entries = {
+            "oracle": "An AC Oracle steps forward, eyes blazing with knowledge...",
+            "guardian": "An AC Guardian stands tall, testing your resolve...",
+            "priest": "An AC Priest moves with solemn purpose, guiding your journey...",
+            "zealot": "An AC Zealot sneers, looking down upon you with disdain..."
+        }
+        return entries.get(character_name.lower(), "")
 
     def check_user_offering_status(self, username):
         """Check if user has made a successful offering"""
@@ -94,7 +105,7 @@ class ACNode:
         except Exception as e:
             raise Exception(f"Failed to check user status: {str(e)}")
 
-    def process_ac_offering_request(self, user_seed, offering_statement, username, reason=None, is_returning=False):
+    def process_ac_offering_request(self, user_seed, offering_statement, username, reason=None, is_returning=False, character_name="oracle"):
         """Enhanced offering request handler that considers returning users and includes a reason for joining."""
         try:
             # Get or create user wallet
@@ -130,7 +141,8 @@ class ACNode:
             ai_response = self.generate_initial_offering_response(
                 offering_statement=offering_statement,
                 username=username,
-                reason=reason  # Pass reason to be included in AI response
+                reason=reason,
+                character_name=character_name
             )
     
             return ai_response
@@ -140,13 +152,10 @@ class ACNode:
             print(error_msg)
             return f"The Church's mechanisms falter: {error_msg}"    
 
-    def generate_initial_offering_response(self, offering_statement, username, reason=None):
-        """Generates an initial character response using the reason for joining if provided."""
-
-        # Use a specific prompt for initial offering
+    def generate_initial_offering_response(self, offering_statement, username, reason=None, character_name="oracle"):
         user_prompt = ac_initial_offering_prompt
+        entry_line = self.get_character_entry(character_name)
 
-        # Append reason to the prompt if provided
         if reason:
             user_prompt += f"\nReason for joining: {reason}"
 
@@ -155,23 +164,18 @@ class ACNode:
             "messages": [
                 {
                     "role": "system", 
-                    "content": random.choice([
-                        ac_oracle_prompt,
-                        ac_guardian_prompt,
-                        ac_priest_prompt,
-                        ac_zealot_prompt
-                    ])
+                    "content": self.character_prompts[character_name]
                 },
                 {
                     "role": "user", 
-                    "content": user_prompt.replace('___USERNAME___', username).replace('___USER_OFFERING_STATEMENT___', offering_statement)
+                    "content": f"{entry_line}\n\n" + user_prompt.replace('___USERNAME___', username).replace('___USER_OFFERING_STATEMENT___', offering_statement)
                 }
             ]
         }
-    
-        response_df = self.llm_interface.query_chat_completion_and_write_to_db(api_args)
-        return response_df['choices__message__content'].iloc[0]    
 
+        response_df = self.llm_interface.query_chat_completion_and_write_to_db(api_args)
+        return response_df['choices__message__content'].iloc[0]
+  
     def store_user_wallet(self, username, seed):
         """Store user wallet details in database"""
         try:
@@ -279,7 +283,7 @@ class ACNode:
         else:
             return "INSANE_OFFERING"
 
-    def generate_ac_character_response(self, context, offering_statement, username):
+    def generate_ac_character_response(self, context, offering_statement, username, character_name="oracle"):
         """Generates character response using LLM interface with context-based prompts."""
         if context == "NO_OFFERING":
             user_prompt = ac_no_offering_prompt
@@ -294,65 +298,23 @@ class ACNode:
         else:
             user_prompt = ac_initial_offering_prompt
 
+        entry_line = self.get_character_entry(character_name)
+
+        full_prompt = f"{entry_line}\n\n" + user_prompt.replace('___USERNAME___', username).replace('___USER_OFFERING_STATEMENT___', offering_statement)
+        
         api_args = {
             "model": "gpt-4-1106-preview",
             "messages": [
                 {
                     "role": "system", 
-                    "content": random.choice([
-                        ac_oracle_prompt,
-                        ac_guardian_prompt,
-                        ac_priest_prompt,
-                        ac_zealot_prompt
-                    ])
+                    "content": self.character_prompts[character_name]  # Set character prompt based on role
                 },
                 {
                     "role": "user", 
-                    "content": user_prompt.replace('___USERNAME___', username).replace('___USER_OFFERING_STATEMENT___', offering_statement)
+                    "content": full_prompt
                 }
             ]
         }
         
         response_df = self.llm_interface.query_chat_completion_and_write_to_db(api_args)
         return response_df['choices__message__content'].iloc[0]
-
-def live_blockchain_test():
-    """Test function to run real mainnet transactions"""
-    try:
-        print("\n=== Starting Live Blockchain Test ===")
-        
-        # Initialize ACNode
-        node = ACNode()
-        
-        # First time only - need seed to store wallet
-        test_wallet_seed = input("Enter your test wallet seed: ")
-        test_username = "test_pilgrim"
-        
-        # Test initial offering request (1 PFT) - this will also store the wallet
-        print("\nTesting initial offering request...")
-        offering_statement = "I humbly seek the wisdom of Accelerando."
-        response = node.process_ac_offering_request(
-            user_seed=test_wallet_seed,  # Only needed first time
-            offering_statement=offering_statement,
-            username=test_username
-        )
-        print("\nOffering Request Response:", response)
-        
-        proceed = input("\nInitial request successful. Proceed with main offering? (y/n): ")
-        if proceed.lower() == 'y':
-            # Future transactions just need username
-            print("\nTesting offering transaction...")
-            offering_amount = 2  # Small test amount
-            response = node.process_ac_offering_transaction(
-                username=test_username,  # No seed needed, using stored wallet
-                offering_amount=offering_amount
-            )
-            print("\nOffering Transaction Response:", response)
-        
-    except Exception as e:
-        print(f"\nERROR: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
-
-if __name__ == "__main__":
-    live_blockchain_test()

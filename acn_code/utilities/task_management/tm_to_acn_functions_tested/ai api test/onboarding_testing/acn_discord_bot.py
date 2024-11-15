@@ -1,3 +1,4 @@
+import random
 import discord
 from discord import app_commands
 from acn_discord_commands import ACNDiscordCommands

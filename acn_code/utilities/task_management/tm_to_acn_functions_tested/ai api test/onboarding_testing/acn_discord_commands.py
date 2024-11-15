@@ -1,8 +1,12 @@
+import random
 import discord
 from discord import app_commands
 from discord.ui import Modal, TextInput
 from typing import Optional
 from datetime import datetime
+
+# Character names in lowercase for consistency
+CHARACTERS = ["oracle", "guardian", "priest", "zealot"]
 
 # Modify SeedInputModal to accept a parameter that determines if seed input is required
 class SeedInputModal(Modal, title='Accelerando Church Node - Initial Offering'):
@@ -47,12 +51,16 @@ class SeedInputModal(Modal, title='Accelerando Church Node - Initial Offering'):
                 user_status = self.commands_instance.acn_node.check_user_offering_status(username)
                 seed = user_status['stored_seed']
 
-            # Process offering request including the reason
+            # Randomly select a character in lowercase
+            character_name = random.choice(CHARACTERS)
+            
+            # Process offering request including the reason and character_name
             response = self.commands_instance.acn_node.process_ac_offering_request(
                 user_seed=seed,
                 offering_statement="I humbly seek the wisdom of Accelerando",
                 username=username,
-                reason=reason
+                reason=reason,
+                character_name=character_name
             )
             
             # Log the interaction with reason included
@@ -105,8 +113,18 @@ class ACNDiscordCommands(app_commands.Group):
                 f"Command processed but logging failed: {error_msg}", 
                 ephemeral=True
             )
+        
+    # Helper function for character entry lines
+    @staticmethod
+    def get_character_entry(character_name):
+        entries = {
+            "oracle": "An AC Oracle steps forward, eyes blazing with knowledge...",
+            "guardian": "An AC Guardian stands tall, testing your resolve...",
+            "priest": "An AC Priest moves with solemn purpose, guiding your journey...",
+            "zealot": "An AC Zealot sneers, looking down upon you with disdain..."
+        }
+        return entries.get(character_name.lower(), "")
 
-    # Modify the offering command to check if seed input is necessary
     @app_commands.command(name="offering", description="Make an offering to Accelerando")
     async def offering(self, interaction: discord.Interaction):
         """Initial offering and greeting, displaying modal with conditional fields."""
@@ -114,9 +132,14 @@ class ACNDiscordCommands(app_commands.Group):
             username = interaction.user.name
             user_status = self.acn_node.check_user_offering_status(username)
 
+            # Randomly select character
+            character_name = random.choice(CHARACTERS)
+            entry_line = self.get_character_entry(character_name)
+
             # Show modal, asking for seed input only if the user does not have a stored seed
             require_seed = not user_status['has_wallet']
             modal = SeedInputModal(self, require_seed=require_seed)
+            modal.character_name = character_name  # Pass character to modal
             await interaction.response.send_modal(modal)
         
         except Exception as e:
@@ -150,16 +173,31 @@ class ACNDiscordCommands(app_commands.Group):
                 )
                 return
 
-            # Process offering using latest method signature
-            response = self.acn_node.process_ac_offering_transaction(
+            # Determine the context based on the amount offered
+            context = self.acn_node._determine_context(amount)
+            
+            # Randomly select a character for roleplay in lowercase
+            character_name = random.choice(CHARACTERS)
+            
+            # Generate entry line based on character
+            entry_line = self.get_character_entry(character_name)  # Helper function for entry line
+            
+            # Process offering using the enhanced response function with entry line
+            response = self.acn_node.generate_ac_character_response(
+                context=context,
+                offering_statement=str(amount),
                 username=username,
-                offering_amount=amount
+                character_name=character_name
             )
             
+            # Concatenate entry line and main response for immersive experience
+            full_response = f"{entry_line}\n\n{response}"
+
+            # Log interaction
             await self.log_and_respond(
                 interaction=interaction,
                 interaction_type="submit_offering",
-                response_message=response,
+                response_message=full_response,
                 success=True,
                 amount=amount
             )
