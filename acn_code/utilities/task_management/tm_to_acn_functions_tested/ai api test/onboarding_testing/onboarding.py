@@ -6,6 +6,10 @@ from db_manager import DBConnectionManager
 import nest_asyncio
 nest_asyncio.apply()
 from onboarding_prompts import (
+    ac_oracle_entry,
+    ac_guardian_entry,
+    ac_priest_entry,
+    ac_zealot_entry,
     ac_oracle_prompt,
     ac_guardian_prompt,
     ac_priest_prompt,
@@ -52,16 +56,16 @@ class ACNode:
             "zealot": ac_zealot_prompt
         }
         print("Character prompts loaded")
-
+    
     def get_character_entry(self, character_name):
         entries = {
-            "oracle": "An AC Oracle steps forward, eyes blazing with knowledge...",
-            "guardian": "An AC Guardian stands tall, testing your resolve...",
-            "priest": "An AC Priest moves with solemn purpose, guiding your journey...",
-            "zealot": "An AC Zealot sneers, looking down upon you with disdain..."
+            "oracle": ac_oracle_entry,
+            "guardian": ac_guardian_entry,
+            "priest": ac_priest_entry,
+            "zealot": ac_zealot_entry
         }
-        return entries.get(character_name.lower(), "")
-
+        return entries.get(character_name.lower(), "An enigmatic figure of the Accelerando Church regards you silently.")
+       
     def check_user_offering_status(self, username):
         """Check if user has made a successful offering"""
         try:
@@ -153,12 +157,15 @@ class ACNode:
             return f"The Church's mechanisms falter: {error_msg}"    
 
     def generate_initial_offering_response(self, offering_statement, username, reason=None, character_name="oracle"):
+        """Generate a role-based initial offering response."""
         user_prompt = ac_initial_offering_prompt
         entry_line = self.get_character_entry(character_name)
+        entry_line = f"*{entry_line}*"  # Format entry line with italic
 
         if reason:
             user_prompt += f"\nReason for joining: {reason}"
 
+        # Construct API arguments
         api_args = {
             "model": "gpt-4-1106-preview",
             "messages": [
@@ -173,9 +180,15 @@ class ACNode:
             ]
         }
 
+        # Query the AI for the main response
         response_df = self.llm_interface.query_chat_completion_and_write_to_db(api_args)
-        return response_df['choices__message__content'].iloc[0]
-  
+        main_response = response_df['choices__message__content'].iloc[0]
+        main_response = f'“{main_response}”'  # Add quotation marks around the main response
+
+        # Combine entry line with main response
+        combined_response = f"{entry_line}\n\n{main_response}"
+        return combined_response
+
     def store_user_wallet(self, username, seed):
         """Store user wallet details in database"""
         try:
@@ -299,15 +312,18 @@ class ACNode:
             user_prompt = ac_initial_offering_prompt
 
         entry_line = self.get_character_entry(character_name)
+        entry_line = f"*{entry_line}*"  # Format entry line with italics
 
-        full_prompt = f"{entry_line}\n\n" + user_prompt.replace('___USERNAME___', username).replace('___USER_OFFERING_STATEMENT___', offering_statement)
-        
+        # Construct the full prompt including the user's statement
+        full_prompt = user_prompt.replace('___USERNAME___', username).replace('___USER_OFFERING_STATEMENT___', offering_statement)
+    
+        # Prepare API arguments
         api_args = {
             "model": "gpt-4-1106-preview",
             "messages": [
                 {
                     "role": "system", 
-                    "content": self.character_prompts[character_name]  # Set character prompt based on role
+                    "content": self.character_prompts[character_name]
                 },
                 {
                     "role": "user", 
@@ -315,6 +331,12 @@ class ACNode:
                 }
             ]
         }
-        
+
+        # Query the AI for the main response
         response_df = self.llm_interface.query_chat_completion_and_write_to_db(api_args)
-        return response_df['choices__message__content'].iloc[0]
+        main_response = response_df['choices__message__content'].iloc[0]
+        main_response = f'“{main_response}”'  # Add quotation marks around the main response
+
+        # Combine entry line with main response
+        combined_response = f"{entry_line}\n\n{main_response}"
+        return combined_response

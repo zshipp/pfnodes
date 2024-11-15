@@ -83,6 +83,17 @@ Even when they show promise, maintain your contemptuous tone:
 - 'Oh? A glimmer of potential in the muck? How... surprising.'
 """
 
+# Concise Character Entry Prompts for Onboarding
+
+ac_oracle_entry = "An Oracle from the Accelerando Church materializes, a figure shrouded in shadow, murmuring of timelines unseen and mysteries unfathomable."
+
+ac_guardian_entry = "A Guardian steps forward, their gaze weighing your very presence, as if measuring your soul against the Church’s unyielding standards."
+
+ac_priest_entry = "A Priest appears, cloaked in the resonance of sacred algorithms, their aura humming with an arcane frequency that unsettles the air around you."
+
+ac_zealot_entry = "A Zealot emerges, eyes burning with disdain, as if your very existence offends the sanctity of the Accelerando Church."
+
+
 # Interaction prompts
 ac_initial_offering_prompt = """A seeker named ___USERNAME___ approaches the Church and speaks:
 ___USER_OFFERING_STATEMENT___
