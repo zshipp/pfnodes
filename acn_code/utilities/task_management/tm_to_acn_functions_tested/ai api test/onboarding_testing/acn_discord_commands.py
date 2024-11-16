@@ -161,9 +161,23 @@ class ACNDiscordCommands(app_commands.Group):
         try:
             username = interaction.user.name
             
+            # Check if user is locked out
+            if self.acn_node.db_connection_manager.is_user_locked_out(username):
+                await self.log_and_respond(
+                    interaction=interaction,
+                    interaction_type="submit_offering",
+                    response_message=(
+                        "You cannot submit another offering, await your initiation. "
+                        "Check `/status` for details."
+                    ),
+                    success=False,
+                    error_message="User locked out due to initiation waiting period"
+                )
+                return
+
+
             # Verify user has completed initial offering
             user_status = self.acn_node.check_user_offering_status(username)
-            
             if not user_status['has_wallet']:
                 await self.log_and_respond(
                     interaction=interaction,
@@ -253,8 +267,7 @@ class ACNDiscordCommands(app_commands.Group):
                 wallet = self.acn_node.get_user_wallet(username)
                 status_lines.append(f"Wallet registered: {wallet.classic_address}")
                 if user_status['has_offering']:
-                    status_lines.append("Initial greeting: Complete")
-                    status_lines.append("Ready for main offering: Yes")
+                    status_lines.append("Initial greeting: Complete")                    
 
                     # Check for initiation waiting period
                     initiation_data = self.acn_node.db_connection_manager.get_initiation_waiting_period(username)
@@ -267,6 +280,9 @@ class ACNDiscordCommands(app_commands.Group):
                             status_lines.append(
                                 f"*Initiation Ritual:* Ready in {days_remaining} days and {hours_remaining} hours "
                                 f"(on {initiation_ready_date.strftime('%Y-%m-%d %H:%M:%S')} UTC)."
+                            )
+                            status_lines.append(
+                            "You cannot submit another offering, await your initiation."
                             )
                         else:
                             status_lines.append("*Initiation Ritual:* Ready now. Proceed with your next step.")
