@@ -5,6 +5,8 @@ from discord.ui import Modal, TextInput
 from typing import Optional
 from datetime import datetime
 from datetime import timedelta
+from onboarding_prompts import ac_zero_offering_prompt
+
 
 # Character names in lowercase for consistency
 CHARACTERS = ["oracle", "guardian", "priest", "zealot"]
@@ -188,6 +190,36 @@ class ACNDiscordCommands(app_commands.Group):
                 )
                 return
 
+            # Handle zero offerings
+            if amount <= 0:
+                response = self.acn_node.generate_ac_character_response(
+                    context="ZERO_OFFERING",  # Ensure correct context is used
+                    offering_statement=str(amount),
+                    username=username,
+                    character_name=random.choice(CHARACTERS)
+                )
+
+                # Include user-facing guidance for standard amount
+                user_message = (
+                    f"{response}\n\n**An offering of 100 PFT marks the first true step on your path to initiation.**"
+                )
+
+                # Log the zero offering
+                self.acn_node.db_connection_manager.log_discord_interaction(
+                    discord_user_id=username,
+                    interaction_type="submit_offering",
+                    amount=amount,
+                    success=False,
+                    response_message=user_message,
+                    error_message="Zero offering submitted"
+                )
+
+                # Send response
+                await interaction.followup.send(user_message, ephemeral=True)
+                return
+
+
+
             # Determine the context based on the amount offered
             context = self.acn_node._determine_context(amount)
             
@@ -287,7 +319,7 @@ class ACNDiscordCommands(app_commands.Group):
                         else:
                             status_lines.append("*Initiation Ritual:* Ready now. Proceed with your next step.")
                     else:
-                        status_lines.append("*Initiation Ritual:* No waiting period data found. Contact support.")
+                        status_lines.append("*Initiation Ritual:* No waiting period data found. Use /submit_offering.")
                 else:
                     status_lines.append("Initial greeting: Pending")
                     status_lines.append("Ready for main offering: No - Use /offering first")

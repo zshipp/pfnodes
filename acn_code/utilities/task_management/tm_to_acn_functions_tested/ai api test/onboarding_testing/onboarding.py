@@ -19,7 +19,9 @@ from onboarding_prompts import (
     ac_standard_offering_prompt,
     ac_significant_offering_prompt,
     ac_exceptional_offering_prompt,
-    ac_insane_offering_prompt
+    ac_insane_offering_prompt,
+    ac_zero_offering_prompt
+
 )
 
 class ACNode:
@@ -286,6 +288,8 @@ class ACNode:
 
     def _determine_context(self, offering_amount):
         """Determine response context based on offering amount."""
+        if offering_amount <= 0:
+            return "ZERO_OFFERING"  # Explicit case for invalid offerings
         if offering_amount < 99:
             return "NO_OFFERING"
         elif offering_amount < 1000:
@@ -299,6 +303,8 @@ class ACNode:
 
     def generate_ac_character_response(self, context, offering_statement, username, character_name="oracle"):
         """Generates character response using LLM interface with context-based prompts."""
+        if context == "ZERO_OFFERING":
+            user_prompt = ac_zero_offering_prompt
         if context == "NO_OFFERING":
             user_prompt = ac_no_offering_prompt
         elif context == "STANDARD_OFFERING":
