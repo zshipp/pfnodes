@@ -21,8 +21,26 @@ from onboarding_prompts import (
     ac_exceptional_offering_prompt,
     ac_insane_offering_prompt,
     ac_zero_offering_prompt
-
 )
+from saints import (
+    snt_malcador_tithe_intro_prompt,
+    snt_konrad_tithe_intro_prompt,
+    snt_lorgar_tithe_intro_prompt,
+    snt_guilliman_tithe_intro_prompt,
+    snt_sanguinius_tithe_intro_prompt,
+    snt_sebastian_tithe_intro_prompt,
+    snt_euphrati_tithe_intro_prompt,
+    snt_crimson_tithe_intro_prompt,
+    snt_malcador_tithe_prompt,
+    snt_konrad_tithe_prompt,
+    snt_lorgar_tithe_prompt,
+    snt_guilliman_tithe_prompt,
+    snt_sanguinius_tithe_prompt,
+    snt_sebastian_tithe_prompt,
+    snt_euphrati_tithe_prompt,
+    snt_crimson_tithe_prompt,
+)
+
 
 class ACNode:
     ACN_WALLET_ADDRESS = "rpb7dex8DMLRXunDcTbbQeteCCYcyo9uSd"
@@ -388,3 +406,80 @@ class ACNode:
                 conn.close()
         except Exception as e:
             raise Exception(f"Failed to retrieve initiation waiting period: {str(e)}")
+
+    def process_tithe(self, username, amount, purpose):
+        """Process tithe interaction and generate LLM response."""
+        try:
+            # Ensure the tithe amount is positive
+            if amount <= 0:
+                raise ValueError("Tithe amount must be greater than zero.")
+
+            # Create mappings for the prompts
+            intro_prompts = {
+                "malcador": snt_malcador_tithe_intro_prompt,
+                "konrad": snt_konrad_tithe_intro_prompt,
+                "lorgar": snt_lorgar_tithe_intro_prompt,
+                "guilliman": snt_guilliman_tithe_intro_prompt,
+                "sanguinius": snt_sanguinius_tithe_intro_prompt,
+                "sebastian": snt_sebastian_tithe_intro_prompt,
+                "euphrati": snt_euphrati_tithe_intro_prompt,
+                "crimson": snt_crimson_tithe_intro_prompt
+            }
+        
+            main_prompts = {
+                "malcador": snt_malcador_tithe_prompt,
+                "konrad": snt_konrad_tithe_prompt,
+                "lorgar": snt_lorgar_tithe_prompt,
+                "guilliman": snt_guilliman_tithe_prompt,
+                "sanguinius": snt_sanguinius_tithe_prompt,
+                "sebastian": snt_sebastian_tithe_prompt,
+                "euphrati": snt_euphrati_tithe_prompt,
+                "crimson": snt_crimson_tithe_prompt
+            }
+
+            # Select a random saint
+            saint_names = list(intro_prompts.keys())
+            selected_saint = random.choice(saint_names)
+        
+            # Get the prompts for the selected saint
+            intro_prompt = intro_prompts[selected_saint]
+            main_prompt = main_prompts[selected_saint]
+
+            # Generate intro response
+            intro_response = self.llm_interface.query_chat_completion_and_write_to_db({
+                "model": "gpt-4-1106-preview",
+                "messages": [
+                    {"role": "system", "content": intro_prompt},
+                    {"role": "user", "content": f"{username} approaches with a tithe of {amount} PFT."}
+                ]
+            })["choices__message__content"][0]
+
+            # Generate main response
+            main_response = self.llm_interface.query_chat_completion_and_write_to_db({
+                "model": "gpt-4-1106-preview",
+                "messages": [
+                    {"role": "system", "content": main_prompt},
+                    {"role": "user", "content": f"{username} has tithed {amount} PFT towards {purpose}."}
+                ]
+            })["choices__message__content"][0]
+
+            # Combine responses
+            final_response = f"*{intro_response}*\n\n{main_response}"
+
+            # Process blockchain transaction
+            user_wallet = self.get_user_wallet(username)
+            self.generic_acn_utilities.send_PFT_with_info(
+                sending_wallet=user_wallet,
+                amount=amount,
+                destination_address=self.ACN_WALLET_ADDRESS,
+                memo=self.generic_acn_utilities.construct_standardized_xrpl_memo(
+                    memo_data=f"TITHE:{purpose}",
+                    memo_format=username,
+                    memo_type="AC_TITHE"
+                )
+            )
+
+            return final_response
+
+        except Exception as e:
+            return f"Error processing tithe: {str(e)}"
