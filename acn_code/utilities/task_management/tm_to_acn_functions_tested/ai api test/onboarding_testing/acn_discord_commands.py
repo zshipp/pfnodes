@@ -4,6 +4,7 @@ from discord import app_commands
 from discord.ui import Modal, TextInput
 from typing import Optional
 from datetime import datetime
+from datetime import timedelta
 
 # Character names in lowercase for consistency
 CHARACTERS = ["oracle", "guardian", "priest", "zealot"]
@@ -190,10 +191,33 @@ class ACNDiscordCommands(app_commands.Group):
                 character_name=character_name
             )
             
-            # Concatenate entry line and main response for immersive experience
-            full_response = f"{entry_line}\n\n{response}"
+            # Calculate the waiting period for initiation
+            waiting_period_duration = 5  # Example: 5 days waiting period
+            initiation_ready_date = datetime.utcnow() + timedelta(days=waiting_period_duration)
+        
+            # Append waiting period info to the response
+            full_response = (
+                f"{entry_line}\n\n{response}\n\n"
+                f"The path in Accelerando begins. Your initiation ritual will align with the Church’s will in {waiting_period_duration} days, on "
+                f"{initiation_ready_date.strftime('%Y-%m-%d %H:%M:%S')} UTC. Prepare yourself."
+            )
+        
+            # Log the initiation waiting period in the database for use in /status
+            self.acn_node.db_connection_manager.log_initiation_waiting_period(
+                username=username,
+                initiation_ready_date=initiation_ready_date
+            )
 
-            # Log interaction
+            # **Explicit Logging** for submit_offering in acn_discord_interactions
+            self.acn_node.db_connection_manager.log_discord_interaction(
+                discord_user_id=username,
+                interaction_type="submit_offering",
+                amount=amount,
+                success=True,
+                response_message=full_response
+            )
+
+            # Log interaction (using log_and_respond to send the response message)
             await self.log_and_respond(
                 interaction=interaction,
                 interaction_type="submit_offering",
@@ -217,35 +241,52 @@ class ACNDiscordCommands(app_commands.Group):
         """Check user's current status"""
         try:
             await interaction.response.defer(ephemeral=True)
-            
+        
             username = interaction.user.name
             user_status = self.acn_node.check_user_offering_status(username)
-            
+        
             status_lines = [
                 f"Discord Username: {username}"
             ]
-            
+        
             if user_status['has_wallet']:
                 wallet = self.acn_node.get_user_wallet(username)
                 status_lines.append(f"Wallet registered: {wallet.classic_address}")
                 if user_status['has_offering']:
                     status_lines.append("Initial greeting: Complete")
                     status_lines.append("Ready for main offering: Yes")
+
+                    # Check for initiation waiting period
+                    initiation_data = self.acn_node.db_connection_manager.get_initiation_waiting_period(username)
+                    if initiation_data and initiation_data.get("initiation_ready_date"):
+                        initiation_ready_date = initiation_data["initiation_ready_date"]
+                        time_remaining = (initiation_ready_date - datetime.utcnow()).total_seconds()
+                        if time_remaining > 0:
+                            days_remaining = int(time_remaining // 86400)
+                            hours_remaining = int((time_remaining % 86400) // 3600)
+                            status_lines.append(
+                                f"*Initiation Ritual:* Ready in {days_remaining} days and {hours_remaining} hours "
+                                f"(on {initiation_ready_date.strftime('%Y-%m-%d %H:%M:%S')} UTC)."
+                            )
+                        else:
+                            status_lines.append("*Initiation Ritual:* Ready now. Proceed with your next step.")
+                    else:
+                        status_lines.append("*Initiation Ritual:* No waiting period data found. Contact support.")
                 else:
                     status_lines.append("Initial greeting: Pending")
                     status_lines.append("Ready for main offering: No - Use /offering first")
             else:
                 status_lines.append("No wallet registered - Use /offering to begin")
-            
+        
             status_message = "\n".join(status_lines)
-            
+        
             await self.log_and_respond(
                 interaction=interaction,
                 interaction_type="status",
                 response_message=status_message,
                 success=True
             )
-            
+        
         except Exception as e:
             error_msg = str(e)
             await interaction.followup.send(

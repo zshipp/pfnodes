@@ -71,43 +71,44 @@ class ACNode:
         try:
             conn = self.db_connection_manager.spawn_psycopg2_db_connection('accelerandochurch')
             cursor = conn.cursor()
-            
+        
             try:
-                # Check for successful offerings > 0 PFT
+                # Corrected interaction_type to 'offering' to match expected command log
                 cursor.execute("""
                     SELECT COUNT(*) 
                     FROM acn_discord_interactions 
                     WHERE discord_user_id = %s 
-                    AND interaction_type = 'offer' 
+                    AND interaction_type = 'offering' 
                     AND amount > 0 
                     AND success = true
                 """, (username,))
-                
+            
                 has_offering = cursor.fetchone()[0] > 0
-                
+            
                 # Get stored wallet if exists
                 cursor.execute("""
                     SELECT wallet_seed 
                     FROM acn_user_wallets 
                     WHERE username = %s
                 """, (username,))
-                
+            
                 wallet_info = cursor.fetchone()
                 has_wallet = wallet_info is not None
                 stored_seed = wallet_info[0] if wallet_info else None
-                
+            
                 return {
                     'has_offering': has_offering,
                     'has_wallet': has_wallet,
                     'stored_seed': stored_seed
                 }
-                
+            
             finally:
                 cursor.close()
                 conn.close()
-                
+            
         except Exception as e:
             raise Exception(f"Failed to check user status: {str(e)}")
+
 
     def process_ac_offering_request(self, user_seed, offering_statement, username, reason=None, is_returning=False, character_name="oracle"):
         """Enhanced offering request handler that considers returning users and includes a reason for joining."""
@@ -340,3 +341,44 @@ class ACNode:
         # Combine entry line with main response
         combined_response = f"{entry_line}\n\n{main_response}"
         return combined_response
+
+    def log_initiation_waiting_period(self, username, initiation_ready_date):
+        """Logs the initiation waiting period in the database."""
+        try:
+            conn = self.db_connection_manager.spawn_psycopg2_db_connection('accelerandochurch')
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                    INSERT INTO acn_initiation_periods (username, initiation_ready_date)
+                    VALUES (%s, %s)
+                    ON CONFLICT (username) DO UPDATE 
+                    SET initiation_ready_date = EXCLUDED.initiation_ready_date;
+                """, (username, initiation_ready_date))
+                conn.commit()
+                print(f"Initiation waiting period logged for {username} (Ready on: {initiation_ready_date})")
+            finally:
+                cursor.close()
+                conn.close()
+        except Exception as e:
+            raise Exception(f"Failed to log initiation waiting period: {str(e)}")
+
+    def get_initiation_waiting_period(self, username):
+        """Retrieves the initiation waiting period data for a user."""
+        try:
+            conn = self.db_connection_manager.spawn_psycopg2_db_connection('accelerandochurch')
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                    SELECT initiation_ready_date
+                    FROM acn_initiation_periods
+                    WHERE username = %s;
+                """, (username,))
+                result = cursor.fetchone()
+                if result:
+                    return {"initiation_ready_date": result[0]}
+                return None
+            finally:
+                cursor.close()
+                conn.close()
+        except Exception as e:
+            raise Exception(f"Failed to retrieve initiation waiting period: {str(e)}")

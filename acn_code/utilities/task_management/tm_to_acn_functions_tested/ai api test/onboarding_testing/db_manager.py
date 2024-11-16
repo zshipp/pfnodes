@@ -166,3 +166,48 @@ class DBConnectionManager:
         finally:
             cursor.close()
             conn.close()
+
+    def log_initiation_waiting_period(self, username, initiation_ready_date):
+        """Log the initiation waiting period in acn_initiation_periods table."""
+        conn = self.spawn_psycopg2_db_connection('accelerandochurch')
+        cursor = conn.cursor()
+    
+        try:
+            cursor.execute("""
+                INSERT INTO acn_initiation_periods (username, initiation_ready_date)
+                VALUES (%s, %s)
+                ON CONFLICT (username) DO UPDATE 
+                SET initiation_ready_date = EXCLUDED.initiation_ready_date;
+            """, (username, initiation_ready_date))
+        
+            conn.commit()
+            print(f"Initiation waiting period logged for user {username}")
+        
+        except Exception as e:
+            conn.rollback()
+            print(f"Error logging initiation waiting period for user {username}: {str(e)}")
+        
+        finally:
+            cursor.close()
+            conn.close()
+
+    def get_initiation_waiting_period(self, username):
+        """Retrieves the initiation waiting period data for a user."""
+        conn = self.spawn_psycopg2_db_connection('accelerandochurch')
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                SELECT initiation_ready_date
+                FROM acn_initiation_periods
+                WHERE username = %s;
+            """, (username,))
+            result = cursor.fetchone()
+            if result:
+                return {"initiation_ready_date": result[0]}
+            return None
+        except Exception as e:
+            raise Exception(f"Failed to retrieve initiation waiting period: {str(e)}")
+        finally:
+            cursor.close()
+            conn.close()
+
