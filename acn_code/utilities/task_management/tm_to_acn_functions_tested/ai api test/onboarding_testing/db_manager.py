@@ -211,3 +211,22 @@ class DBConnectionManager:
             cursor.close()
             conn.close()
 
+    def is_user_locked_out(self, username):
+        """Check if the user is locked out due to an active initiation waiting period."""
+        try:
+            conn = self.spawn_psycopg2_db_connection('accelerandochurch')
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                    SELECT initiation_ready_date
+                    FROM acn_initiation_periods
+                    WHERE username = %s AND initiation_ready_date > CURRENT_TIMESTAMP;
+                """, (username,))
+                result = cursor.fetchone()
+                return result is not None
+            finally:
+                cursor.close()
+                conn.close()
+        except Exception as e:
+            raise Exception(f"Failed to check user lockout status: {str(e)}")
+

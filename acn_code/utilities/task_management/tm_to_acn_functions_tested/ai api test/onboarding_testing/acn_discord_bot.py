@@ -15,6 +15,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger('ACNDiscordBot')
 
+
 class ACNDiscordBot(discord.Client):
     def __init__(self):
         # Initialize with required intents
@@ -26,35 +27,30 @@ class ACNDiscordBot(discord.Client):
         # Command tree setup
         self.tree = app_commands.CommandTree(self)
         
-        # Setup password loader and get Discord token
+        # Only load Discord token
         self.password_loader = PasswordMapLoader()
-        self.pw_map = {
-            'openai': self.password_loader.get_password("OPENAI_API_KEY"),
-            'discord_token': self.password_loader.get_password("DISCORD_TOKEN"),
-            'acn_node__v1xrpsecret': self.password_loader.get_password("ACN_WALLET_SEED")
-        }
+        self.discord_token = self.password_loader.get_password("DISCORD_TOKEN")
         
-        # Initialize ACNode with pw_map
+        # Initialize ACNode
         self.acn_node = ACNode()
         
         # Period tracking for rate limiting
         self.period_map = {
             'offering_cooldown': timedelta(hours=22),  # 24 hour cooldown between offerings
-            'status_cooldown': timedelta(minutes=1),   # 5 minute cooldown for status checks
+            'status_cooldown': timedelta(minutes=1),   # 1 minute cooldown for status checks
             'last_offering': {},  # Track last offering time per user
             'last_status': {}     # Track last status check per user
         }
         
         # Add commands group
         self.tree.add_command(ACNDiscordCommands(self.acn_node))
-        
         logger.info("ACNDiscordBot initialized successfully")
 
     async def setup_hook(self):
         """Initial setup after bot connects"""
         try:
-            await self.tree.sync()
-            logger.info("Command tree synchronized")
+            await self.tree.sync()  # Sync the command tree to Discord
+            logger.info("Command tree synchronized successfully")
         except Exception as e:
             logger.error(f"Failed to sync command tree: {str(e)}")
             raise
@@ -90,14 +86,16 @@ class ACNDiscordBot(discord.Client):
         elif action_type == 'status':
             self.period_map['last_status'][user_id] = datetime.now()
 
+
 def run_discord_bot():
     """Run the Discord bot with error handling"""
     try:
         client = ACNDiscordBot()
-        client.run(client.pw_map['discord_token'])
+        client.run(client.discord_token)
     except Exception as e:
         logger.critical(f"Bot failed to start: {str(e)}")
         raise
+
 
 if __name__ == "__main__":
     run_discord_bot()
