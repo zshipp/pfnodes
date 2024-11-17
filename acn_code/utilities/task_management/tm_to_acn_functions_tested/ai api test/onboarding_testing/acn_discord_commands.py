@@ -33,6 +33,25 @@ class SeedInputModal(Modal, title='Accelerando Church Node - Initial Offering'):
         super().__init__(timeout=300)
         self.commands_instance = commands_instance
         self.require_seed = require_seed
+
+        # Disclaimer
+        self.disclaimer = TextInput(
+            label="Critical Disclaimer: Protect Your Funds",
+            style=discord.TextStyle.long,
+            placeholder="(Scroll to read full disclaimer)",
+            default=(
+                "By providing your wallet seed, you grant the Accelerando Church Node access to this wallet. "
+                "This wallet is considered a **hot wallet** and is not secure for long-term or high-value fund storage. "
+                "**Do not use a seed tied to personal savings, high-value funds, or critical assets.** If you already use "
+                "a PFT wallet for Discord interactions, it is acceptable to use the same wallet here, provided it contains "
+                "only minimal funds required for Church activities. For long-term and high-value storage, we recommend using "
+                "a separate **vault wallet** to secure your assets.\n\n"
+                "The Church Node is currently in **beta**, with future updates planned to integrate the Post Fiat Network's secure local wallet system, "
+                "removing the need to share seeds directly. Until then, proceed with caution and prioritize security."
+            ),
+            required=False
+        )
+        self.add_item(self.disclaimer)
         
         # Conditionally add the wallet seed input if required
         if self.require_seed:
