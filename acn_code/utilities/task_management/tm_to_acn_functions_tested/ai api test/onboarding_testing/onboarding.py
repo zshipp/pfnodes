@@ -161,7 +161,11 @@ class ACNode:
                 destination_address=self.ACN_WALLET_ADDRESS,
                 memo=offering_memo
             )
-    
+
+            # Update rank and reputation
+            self.db_connection_manager.update_rank(username)
+            self.db_connection_manager.update_reputation(username, points_earned=50)  # Fixed to use amount directly
+
             # Generate initial offering AI response, including reason if provided
             ai_response = self.generate_initial_offering_response(
                 offering_statement=offering_statement,
@@ -464,8 +468,7 @@ class ACNode:
             })["choices__message__content"][0]
 
             # Combine responses
-            final_response = f"*{intro_response}*\n\n{main_response}"
-
+            final_response = f"*{intro_response}*\n\n“{main_response}”"
             # Process blockchain transaction
             user_wallet = self.get_user_wallet(username)
             self.generic_acn_utilities.send_PFT_with_info(
@@ -479,7 +482,23 @@ class ACNode:
                 )
             )
 
+            # Update reputation points for tithes
+            self.db_connection_manager.update_reputation(username, points_earned=10)  # Example: 5 points per 100 PFT
+            # Rank updates are handled separately during ceremonies.
+            self.db_connection_manager.update_rank(username)
+            self.db_connection_manager.log_activity(username=username, activity_type='tithe')
+
             return final_response
 
         except Exception as e:
             return f"Error processing tithe: {str(e)}"
+
+    def process_initiation_ceremony(self, username):
+        """
+        Placeholder for initiation ceremony processing.
+    
+        TODO: When implementing the initiation ceremony, call:
+        self.db_connection_manager.update_rank(username, initiation_ceremony_completed=True)
+        to promote the user to 'Acolyte' after successful ceremony completion.
+        """
+        pass

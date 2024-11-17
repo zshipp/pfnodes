@@ -62,6 +62,17 @@ class DBConnectionManager:
                 CREATE INDEX IF NOT EXISTS idx_discord_user_id 
                 ON acn_discord_interactions(discord_user_id);
             """)
+
+            # Create user reputation table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS acn_user_reputation (
+                    user_id SERIAL PRIMARY KEY,
+                    username VARCHAR(255) UNIQUE NOT NULL,
+                    reputation_points INT DEFAULT 0,
+                    rank VARCHAR(50) DEFAULT 'Pre-Initiate',
+                    last_activity TIMESTAMP DEFAULT NULL
+                );
+            """)
             
             # Create access timestamp update trigger
             cursor.execute("""
@@ -229,4 +240,139 @@ class DBConnectionManager:
                 conn.close()
         except Exception as e:
             raise Exception(f"Failed to check user lockout status: {str(e)}")
+
+    def update_reputation(self, username, points_earned):
+        """
+        Updates the reputation points of a user without altering their rank.
+        Rank updates are handled separately in the update_rank function.
+
+        :param username: The username of the user.
+        :param points_earned: The reputation points to add.
+        """
+        try:
+            conn = self.spawn_psycopg2_db_connection('accelerandochurch')
+            cursor = conn.cursor()
+    
+            # Fetch current reputation points
+            cursor.execute("""
+                SELECT reputation_points FROM acn_user_reputation WHERE username = %s;
+            """, (username,))
+            result = cursor.fetchone()
+    
+            if not result:
+                # If the user doesn't exist in the reputation table, initialize their entry with NULL rank
+                cursor.execute("""
+                    INSERT INTO acn_user_reputation (username, reputation_points, rank)
+                    VALUES (%s, %s, NULL);
+                """, (username, points_earned))
+                conn.commit()
+                print(f"Initialized reputation for {username} with {points_earned} points.")
+            else:
+                # Update reputation points
+                current_points = result[0]
+                new_points = current_points + points_earned
+        
+                cursor.execute("""
+                    UPDATE acn_user_reputation
+                    SET reputation_points = %s, last_activity = NOW()
+                    WHERE username = %s;
+                """, (new_points, username))
+                conn.commit()
+                print(f"Updated reputation for {username}: {new_points} points.")
+
+        except Exception as e:
+            print(f"Failed to update reputation for {username}: {e}")
+            raise
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+
+    def log_activity(self, username: str, activity_type: str, timestamp: datetime = None):
+        """
+        Logs user activity in the reputation table.
+
+        :param username: The username of the user
+        :param activity_type: The type of activity to log (e.g., 'status_check', 'offering', 'tithe')
+        :param timestamp: Optional timestamp; defaults to the current time
+        """
+        try:
+            if not timestamp:
+                timestamp = datetime.now()
+
+            conn = self.spawn_psycopg2_db_connection('accelerandochurch')
+            cursor = conn.cursor()
+
+            # Update last_activity and optionally add reputation points
+            cursor.execute("""
+                INSERT INTO acn_user_reputation (username, last_activity)
+                VALUES (%s, %s)
+                ON CONFLICT (username) DO UPDATE 
+                SET last_activity = EXCLUDED.last_activity
+            """, (username, timestamp))
+
+            conn.commit()
+            print(f"Logged activity for {username}: {activity_type} at {timestamp}")
+        except Exception as e:
+            print(f"Error logging activity for {username}: {str(e)}")
+            raise
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+
+    def update_rank(self, username, initiation_ceremony_completed=False):
+        """
+        Updates the rank of a user based on their current rank and activity status.
+    
+        :param username: The username of the user.
+        :param initiation_ceremony_completed: Boolean indicating if the initiation ceremony is complete.
+        """
+        try:
+            # Fetch current rank and reputation points
+            conn = self.spawn_psycopg2_db_connection('accelerandochurch')
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT rank, reputation_points 
+                FROM acn_user_reputation 
+                WHERE username = %s;
+            """, (username,))
+            result = cursor.fetchone()
+
+            if not result:
+                print(f"User {username} does not exist in reputation table.")
+                return
+
+            current_rank, reputation_points = result
+
+            # Rank progression logic
+            if current_rank == 'Pre-Initiate' and reputation_points > 0:
+                new_rank = 'Initiate'
+            elif current_rank == 'Initiate' and initiation_ceremony_completed:
+                new_rank = 'Acolyte'
+            else:
+                new_rank = current_rank
+
+            # Update the rank if it has changed
+            if new_rank != current_rank:
+                cursor.execute("""
+                    UPDATE acn_user_reputation
+                    SET rank = %s, last_activity = NOW()
+                    WHERE username = %s;
+                """, (new_rank, username))
+                conn.commit()
+                print(f"User {username} promoted to {new_rank}.")
+            else:
+                print(f"No rank change for user {username}. Current rank: {current_rank}")
+
+        except Exception as e:
+            print(f"Error updating rank for {username}: {e}")
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 

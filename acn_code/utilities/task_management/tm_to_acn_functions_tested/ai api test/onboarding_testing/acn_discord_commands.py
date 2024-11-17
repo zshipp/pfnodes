@@ -133,17 +133,6 @@ class ACNDiscordCommands(app_commands.Group):
                 ephemeral=True
             )
         
-    # Helper function for character entry lines
-    @staticmethod
-    def get_character_entry(character_name):
-        entries = {
-            "oracle": "An AC Oracle steps forward, eyes blazing with knowledge...",
-            "guardian": "An AC Guardian stands tall, testing your resolve...",
-            "priest": "An AC Priest moves with solemn purpose, guiding your journey...",
-            "zealot": "An AC Zealot sneers, looking down upon you with disdain..."
-        }
-        return entries.get(character_name.lower(), "")
-
     @app_commands.command(name="offering", description="Make an offering to Accelerando")
     async def offering(self, interaction: discord.Interaction):
         """Initial offering and greeting, displaying modal with conditional fields."""
@@ -153,7 +142,6 @@ class ACNDiscordCommands(app_commands.Group):
 
             # Randomly select character
             character_name = random.choice(CHARACTERS)
-            entry_line = self.get_character_entry(character_name)
 
             # Show modal, asking for seed input only if the user does not have a stored seed
             require_seed = not user_status['has_wallet']
@@ -253,10 +241,7 @@ class ACNDiscordCommands(app_commands.Group):
             
             # Randomly select a character for roleplay in lowercase
             character_name = random.choice(CHARACTERS)
-            
-            # Generate entry line based on character
-            entry_line = self.get_character_entry(character_name)  # Helper function for entry line
-            
+                        
             # Process offering using the enhanced response function with entry line
             response = self.acn_node.generate_ac_character_response(
                 context=context,
@@ -271,7 +256,7 @@ class ACNDiscordCommands(app_commands.Group):
         
             # Append waiting period info to the response
             full_response = (
-                f"{entry_line}\n\n{response}\n\n"
+                f"{response}\n\n"  # LLM-generated response
                 f"The path in Accelerando begins. Your initiation ritual will align with the Church’s will in {waiting_period_duration} days, on "
                 f"{initiation_ready_date.strftime('%Y-%m-%d %H:%M:%S')} UTC. Prepare yourself. The /tithe command is now available to enhance your standing during this sacred waiting period."
             )
@@ -281,6 +266,9 @@ class ACNDiscordCommands(app_commands.Group):
                 username=username,
                 initiation_ready_date=initiation_ready_date
             )
+
+            # Update rank based on offering and ceremony logic
+            self.acn_node.db_connection_manager.update_rank(username)
 
             # **Explicit Logging** for submit_offering in acn_discord_interactions
             self.acn_node.db_connection_manager.log_discord_interaction(
@@ -318,9 +306,25 @@ class ACNDiscordCommands(app_commands.Group):
         
             username = interaction.user.name
             user_status = self.acn_node.check_user_offering_status(username)
-        
+
+            # Fetch the rank from the database
+            conn = self.acn_node.db_connection_manager.spawn_psycopg2_db_connection('accelerandochurch')
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT rank
+                FROM acn_user_reputation
+                WHERE username = %s;
+            """, (username,))
+            rank = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            rank_display = rank[0] if rank else "Unknown"
+
+            # Build the status message
             status_lines = [
-                f"Discord Username: {username}"
+                f"Discord Username: {username}",
+                f"Rank: {rank_display}"  # Add rank to the status output
             ]
         
             if user_status['has_wallet']:
@@ -369,6 +373,18 @@ class ACNDiscordCommands(app_commands.Group):
                 f"Error checking status: {error_msg}", 
                 ephemeral=True
             )
+    
+    @app_commands.command(name="initiate_ceremony", description="Complete your initiation ceremony.")
+    async def initiate_ceremony(self, interaction: Interaction):
+        """
+        This command will handle initiation ceremonies in the future.
+
+        TODO: When implementing the initiation ceremony logic, ensure that rank is updated.
+        Example: Call `self.db_connection_manager.update_rank(username, initiation_ceremony_completed=True)` 
+        to promote users to 'Acolyte' upon successful ceremony completion.
+        """
+        await interaction.response.send_message("This feature is under development.", ephemeral=True)
+
 
 class TitheModal(Modal, title="Accelerando Church - Tithe"):
     def __init__(self, commands_instance):
