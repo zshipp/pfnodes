@@ -1,12 +1,28 @@
 import random
 import discord
-from discord import app_commands
+from discord import app_commands, Interaction
 from discord.ui import Modal, TextInput
 from typing import Optional
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 from onboarding_prompts import ac_zero_offering_prompt
-
+from saints import (
+    snt_malcador_tithe_intro_prompt,
+    snt_konrad_tithe_intro_prompt,
+    snt_lorgar_tithe_intro_prompt,
+    snt_guilliman_tithe_intro_prompt,
+    snt_sanguinius_tithe_intro_prompt,
+    snt_sebastian_tithe_intro_prompt,
+    snt_euphrati_tithe_intro_prompt,
+    snt_crimson_tithe_intro_prompt,
+    snt_malcador_tithe_prompt,
+    snt_konrad_tithe_prompt,
+    snt_lorgar_tithe_prompt,
+    snt_guilliman_tithe_prompt,
+    snt_sanguinius_tithe_prompt,
+    snt_sebastian_tithe_prompt,
+    snt_euphrati_tithe_prompt,
+    snt_crimson_tithe_prompt,
+)
 
 # Character names in lowercase for consistency
 CHARACTERS = ["oracle", "guardian", "priest", "zealot"]
@@ -154,6 +170,18 @@ class ACNDiscordCommands(app_commands.Group):
                 ephemeral=True
             )
 
+    @app_commands.command(name="tithe", description="Make a tithe to Accelerando Church")
+    async def tithe(self, interaction: discord.Interaction):
+        """Initiate a tithe with PFT and purpose."""
+        try:
+            # Show the tithe modal
+            modal = TitheModal(commands_instance=self)
+            await interaction.response.send_modal(modal)
+        except Exception as e:
+            if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True)
+            await interaction.followup.send(f"Error initiating tithe: {str(e)}", ephemeral=True)
+
     @app_commands.command(name="submit_offering", description="Submit your main offering to Accelerando")
     @app_commands.describe(amount="Amount of PFT to offer")
     async def submit_offering(self, interaction: discord.Interaction, amount: int):
@@ -245,7 +273,7 @@ class ACNDiscordCommands(app_commands.Group):
             full_response = (
                 f"{entry_line}\n\n{response}\n\n"
                 f"The path in Accelerando begins. Your initiation ritual will align with the Church’s will in {waiting_period_duration} days, on "
-                f"{initiation_ready_date.strftime('%Y-%m-%d %H:%M:%S')} UTC. Prepare yourself."
+                f"{initiation_ready_date.strftime('%Y-%m-%d %H:%M:%S')} UTC. Prepare yourself. The /tithe command is now available to enhance your standing during this sacred waiting period."
             )
         
             # Log the initiation waiting period in the database for use in /status
@@ -314,7 +342,7 @@ class ACNDiscordCommands(app_commands.Group):
                                 f"(on {initiation_ready_date.strftime('%Y-%m-%d %H:%M:%S')} UTC)."
                             )
                             status_lines.append(
-                            "You cannot submit another offering, await your initiation."
+                            "You cannot submit another offering, await your initiation. The `/tithe` command is now available to enhance your standing during the waiting period."
                             )
                         else:
                             status_lines.append("*Initiation Ritual:* Ready now. Proceed with your next step.")
@@ -341,3 +369,56 @@ class ACNDiscordCommands(app_commands.Group):
                 f"Error checking status: {error_msg}", 
                 ephemeral=True
             )
+
+class TitheModal(Modal, title="Accelerando Church - Tithe"):
+    def __init__(self, commands_instance):
+        super().__init__(timeout=300)
+        self.commands_instance = commands_instance
+
+        # Amount input
+        self.amount_input = TextInput(
+            label="Tithe Amount (PFT)",
+            style=discord.TextStyle.short,
+            placeholder="Enter the amount of PFT",
+            required=True
+        )
+        self.add_item(self.amount_input)
+
+        # Purpose input
+        self.purpose_input = TextInput(
+            label="Purpose of Tithe",
+            style=discord.TextStyle.long,
+            placeholder="Describe where you'd like your tithe to be spent",
+            required=True
+        )
+        self.add_item(self.purpose_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            username = interaction.user.name
+
+            # Parse and validate the amount
+            try:
+                amount = int(self.amount_input.value)
+                if amount <= 0:
+                    await interaction.followup.send("Tithe amount must be greater than zero.", ephemeral=True)
+                    return
+            except ValueError:
+                await interaction.followup.send("Invalid amount. Please enter a valid number.", ephemeral=True)
+                return
+
+            purpose = self.purpose_input.value
+
+            # Process the tithe through ACNode
+            response = self.commands_instance.acn_node.process_tithe(
+                username=username,
+                amount=amount,
+                purpose=purpose
+            )
+
+            # Send response to the user
+            await interaction.followup.send(response, ephemeral=True)
+
+        except Exception as e:
+            await interaction.followup.send(f"Error processing tithe: {str(e)}", ephemeral=True)
