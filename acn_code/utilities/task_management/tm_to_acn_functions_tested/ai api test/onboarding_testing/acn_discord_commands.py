@@ -355,6 +355,9 @@ class ACNDiscordCommands(app_commands.Group):
             username = interaction.user.name
             user_status = self.acn_node.check_user_offering_status(username)
 
+            # Ensure user exists in reputation table
+            self.acn_node.db_connection_manager.ensure_user_exists(username)
+
             # Fetch the rank from the database
             conn = self.acn_node.db_connection_manager.spawn_psycopg2_db_connection('accelerandochurch')
             cursor = conn.cursor()
@@ -367,7 +370,7 @@ class ACNDiscordCommands(app_commands.Group):
             cursor.close()
             conn.close()
 
-            rank_display = rank[0] if rank else "Unknown"
+            rank_display = rank[0] if rank else "Error retrieving rank"
 
             # Build the status message
             status_lines = [

@@ -70,7 +70,7 @@ class DBConnectionManager:
                     user_id SERIAL PRIMARY KEY,
                     username VARCHAR(255) UNIQUE NOT NULL,
                     reputation_points INT DEFAULT 0,
-                    rank VARCHAR(50) DEFAULT 'Pre-Initiate',
+                    rank VARCHAR(50) DEFAULT 'Akromeni',
                     last_activity TIMESTAMP DEFAULT NULL
                 );
             """)
@@ -355,52 +355,61 @@ class DBConnectionManager:
                 conn.close()
 
     def update_rank(self, username, initiation_ceremony_completed=False):
-        """
-        Updates the rank of a user based on their current rank and activity status.
-    
-        :param username: The username of the user.
-        :param initiation_ceremony_completed: Boolean indicating if the initiation ceremony is complete.
-        """
+        """Updates the rank of a user based on their progression through onboarding steps."""
         try:
-            # Fetch current rank and reputation points
             conn = self.spawn_psycopg2_db_connection('accelerandochurch')
             cursor = conn.cursor()
 
+            # Get current rank
             cursor.execute("""
-                SELECT rank, reputation_points 
-                FROM acn_user_reputation 
-                WHERE username = %s;
+                SELECT rank FROM acn_user_reputation WHERE username = %s;
             """, (username,))
             result = cursor.fetchone()
 
             if not result:
-                print(f"User {username} does not exist in reputation table.")
-                return
-
-            current_rank, reputation_points = result
-
-            # Rank progression logic
-            if current_rank == 'Pre-Initiate' and reputation_points > 0:
-                new_rank = 'Initiate'
-            elif current_rank == 'Initiate' and initiation_ceremony_completed:
-                new_rank = 'Acolyte'
+                # New user - insert with Akromeni rank
+                cursor.execute("""
+                    INSERT INTO acn_user_reputation (username, rank)
+                    VALUES (%s, 'Akromeni');
+                """, (username,))
+                current_rank = 'Akromeni'
             else:
-                new_rank = current_rank
+                current_rank = result[0]
 
-            # Update the rank if it has changed
-            if new_rank != current_rank:
+            # Check for rank progression conditions
+            if current_rank == 'Akromeni':
+                # Check if they've completed submit_offering
+                cursor.execute("""
+                    SELECT COUNT(*) FROM acn_discord_interactions
+                    WHERE discord_user_id = %s 
+                    AND interaction_type = 'submit_offering'
+                    AND success = true;
+                """, (username,))
+                has_submitted_offering = cursor.fetchone()[0] > 0
+
+                if has_submitted_offering:
+                    new_rank = 'Mystai'
+                    cursor.execute("""
+                        UPDATE acn_user_reputation
+                        SET rank = %s, last_activity = NOW()
+                        WHERE username = %s;
+                    """, (new_rank, username))
+
+            elif current_rank == 'Mystai' and initiation_ceremony_completed:
+                # Only progress to Acolyte if ceremony is completed
+                new_rank = 'Acolyte'
                 cursor.execute("""
                     UPDATE acn_user_reputation
                     SET rank = %s, last_activity = NOW()
                     WHERE username = %s;
                 """, (new_rank, username))
-                conn.commit()
-                print(f"User {username} promoted to {new_rank}.")
-            else:
-                print(f"No rank change for user {username}. Current rank: {current_rank}")
+
+            conn.commit()
 
         except Exception as e:
             print(f"Error updating rank for {username}: {e}")
+            if conn:
+                conn.rollback()
         finally:
             if cursor:
                 cursor.close()
@@ -463,6 +472,21 @@ class DBConnectionManager:
         
             return cursor.fetchall()
         
+        finally:
+            cursor.close()
+            conn.close()
+
+    def ensure_user_exists(self, username):
+        """Ensures user exists in reputation table with initial rank."""
+        conn = self.spawn_psycopg2_db_connection('accelerandochurch')
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO acn_user_reputation (username, rank)
+                VALUES (%s, 'Akromeni')
+                ON CONFLICT (username) DO NOTHING;
+            """, (username,))
+            conn.commit()
         finally:
             cursor.close()
             conn.close()

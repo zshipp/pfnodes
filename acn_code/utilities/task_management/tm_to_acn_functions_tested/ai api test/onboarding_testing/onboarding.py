@@ -146,6 +146,9 @@ class ACNode:
             if not is_returning:
                 self.store_user_wallet(username, user_seed)
 
+            # Ensure user exists in reputation table with Akromeni rank
+            self.db_connection_manager.ensure_user_exists(username)    
+
             # Generate initial offering AI response, including reason if provided
             ai_response = self.generate_initial_offering_response(
                 offering_statement=offering_statement,
@@ -189,8 +192,7 @@ class ACNode:
                 amount=1
             )
 
-            # Update rank and reputation
-            self.db_connection_manager.update_rank(username)
+            # Update reputation
             self.db_connection_manager.update_reputation(username, points_earned=50)  # Fixed to use amount directly
 
             return ai_response
