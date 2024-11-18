@@ -101,13 +101,17 @@ class SeedInputModal(Modal, title='Accelerando Church Node - Initial Offering'):
                 character_name=character_name
             )
             
+            # Log the reason in the database
+            self.commands_instance.acn_node.db_connection_manager.save_user_reason(username, reason)
+
             # Log the interaction with reason included
             await self.commands_instance.log_and_respond(
                 interaction=interaction,
                 interaction_type="offering",
                 response_message=response,
                 success=True,
-                amount=1
+                amount=1,
+                reason=reason
             )
 
             # Follow-up prompt for submitting main offering
@@ -125,7 +129,7 @@ class ACNDiscordCommands(app_commands.Group):
         self.acn_node = acn_node
 
     async def log_and_respond(self, interaction, interaction_type, response_message, 
-                              success=True, error_message=None, amount=None):
+                              success=True, error_message=None, amount=None, reason=None):
         """Helper method to log interaction and send response"""
         try:
             username = interaction.user.name
@@ -139,7 +143,8 @@ class ACNDiscordCommands(app_commands.Group):
                     amount=amount,
                     success=success,
                     error_message=error_message,
-                    response_message=response_message
+                    response_message=response_message,
+                    reason=reason
                 )
             
             await interaction.followup.send(response_message, ephemeral=True)
@@ -194,25 +199,10 @@ class ACNDiscordCommands(app_commands.Group):
     async def submit_offering(self, interaction: discord.Interaction, amount: int):
         """Submit main offering after initial greeting"""
         await interaction.response.defer(ephemeral=True)
-        
+    
         try:
             username = interaction.user.name
-            
-            # Check if user is locked out
-            if self.acn_node.db_connection_manager.is_user_locked_out(username):
-                await self.log_and_respond(
-                    interaction=interaction,
-                    interaction_type="submit_offering",
-                    response_message=(
-                        "You cannot submit another offering, await your initiation. "
-                        "Check `/status` for details."
-                    ),
-                    success=False,
-                    error_message="User locked out due to initiation waiting period"
-                )
-                return
-
-
+        
             # Verify user has completed initial offering
             user_status = self.acn_node.check_user_offering_status(username)
             if not user_status['has_wallet']:
@@ -225,21 +215,34 @@ class ACNDiscordCommands(app_commands.Group):
                 )
                 return
 
+            # Check if user has ALREADY completed a successful main offering (moved after initial check)
+            existing_initiation = self.acn_node.db_connection_manager.get_initiation_waiting_period(username)
+            if existing_initiation and existing_initiation.get('initiation_ready_date'):
+                await self.log_and_respond(
+                    interaction=interaction,
+                    interaction_type="submit_offering",
+                    response_message=(
+                        "You have already submitted your main offering. Await your initiation. "
+                        "Check `/status` for details."
+                    ),
+                    success=False,
+                    error_message="User already has active initiation period"
+                )
+                return
+
             # Handle zero offerings
             if amount <= 0:
                 response = self.acn_node.generate_ac_character_response(
-                    context="ZERO_OFFERING",  # Ensure correct context is used
+                    context="ZERO_OFFERING",
                     offering_statement=str(amount),
                     username=username,
                     character_name=random.choice(CHARACTERS)
                 )
 
-                # Include user-facing guidance for standard amount
                 user_message = (
                     f"{response}\n\n**An offering of 100 PFT marks the first true step on your path to initiation.**"
                 )
 
-                # Log the zero offering
                 self.acn_node.db_connection_manager.log_discord_interaction(
                     discord_user_id=username,
                     interaction_type="submit_offering",
@@ -249,64 +252,90 @@ class ACNDiscordCommands(app_commands.Group):
                     error_message="Zero offering submitted"
                 )
 
-                # Send response
                 await interaction.followup.send(user_message, ephemeral=True)
                 return
 
-
-
             # Determine the context based on the amount offered
             context = self.acn_node._determine_context(amount)
-            
+        
             # Randomly select a character for roleplay in lowercase
             character_name = random.choice(CHARACTERS)
-                        
-            # Process offering using the enhanced response function with entry line
+                    
+            # Generate the response BEFORE creating full_response
             response = self.acn_node.generate_ac_character_response(
                 context=context,
                 offering_statement=str(amount),
                 username=username,
                 character_name=character_name
             )
-            
-            # Calculate the waiting period for initiation
-            waiting_period_duration = 5  # Example: 5 days waiting period
+
+            # Calculate waiting period AFTER response generation
+            waiting_period_duration = 5
             initiation_ready_date = datetime.utcnow() + timedelta(days=waiting_period_duration)
-        
-            # Append waiting period info to the response
+    
+            # Now we can create full_response since we have 'response'
             full_response = (
-                f"{response}\n\n"  # LLM-generated response
-                f"The path in Accelerando begins. Your initiation ritual will align with the Church’s will in {waiting_period_duration} days, on "
+                f"{response}\n\n"
+                f"The path in Accelerando begins. Your initiation ritual will align with the Church's will in {waiting_period_duration} days, on "
                 f"{initiation_ready_date.strftime('%Y-%m-%d %H:%M:%S')} UTC. Prepare yourself. The /tithe command is now available to enhance your standing during this sacred waiting period."
             )
-        
-            # Log the initiation waiting period in the database for use in /status
-            self.acn_node.db_connection_manager.log_initiation_waiting_period(
-                username=username,
-                initiation_ready_date=initiation_ready_date
-            )
 
-            # Update rank based on offering and ceremony logic
-            self.acn_node.db_connection_manager.update_rank(username)
-
-            # **Explicit Logging** for submit_offering in acn_discord_interactions
-            self.acn_node.db_connection_manager.log_discord_interaction(
+            # Log Discord interaction and process blockchain transaction
+            interaction_id = self.acn_node.db_connection_manager.log_discord_interaction(
                 discord_user_id=username,
                 interaction_type="submit_offering",
                 amount=amount,
                 success=True,
-                response_message=full_response
+                response_message=full_response,
+                reason=None
             )
 
-            # Log interaction (using log_and_respond to send the response message)
-            await self.log_and_respond(
-                interaction=interaction,
-                interaction_type="submit_offering",
-                response_message=full_response,
-                success=True,
-                amount=amount
-            )
+            try:
+                # Process blockchain transaction
+                user_wallet = self.acn_node.get_user_wallet(username)
+                tx_response = self.acn_node.generic_acn_utilities.send_PFT_with_info(
+                    sending_wallet=user_wallet,
+                    amount=amount,
+                    destination_address=self.acn_node.ACN_WALLET_ADDRESS,
+                    memo=self.acn_node.generic_acn_utilities.construct_standardized_xrpl_memo(
+                        memo_data=f"MAIN_OFFERING:{amount}",
+                        memo_format=username,
+                        memo_type="AC_MAIN_OFFERING"
+                    )
+                )
             
+                # Log blockchain transaction
+                self.acn_node.db_connection_manager.log_blockchain_transaction(
+                    username=username,
+                    interaction_id=interaction_id,
+                    tx_hash=tx_response.result.get('hash'),
+                    tx_type='main_offering',
+                    amount=amount
+                )
+
+                # Only NOW set the initiation waiting period (after successful blockchain transaction)
+                self.acn_node.db_connection_manager.log_initiation_waiting_period(
+                    username=username,
+                    initiation_ready_date=initiation_ready_date
+                )
+
+            except Exception as e:
+                print(f"Blockchain processing error: {str(e)}")
+                await self.log_and_respond(
+                    interaction=interaction,
+                    interaction_type="submit_offering",
+                    response_message=f"Error processing offering transaction: {str(e)}",
+                    success=False,
+                    error_message=str(e)
+                )
+                return
+
+            # Update rank based on offering and ceremony logic
+            self.acn_node.db_connection_manager.update_rank(username)
+
+            # Send final response
+            await interaction.followup.send(full_response, ephemeral=True)
+        
         except Exception as e:
             error_msg = str(e)
             await self.log_and_respond(
@@ -420,13 +449,13 @@ class TitheModal(Modal, title="Accelerando Church - Tithe"):
         self.add_item(self.amount_input)
 
         # Purpose input
-        self.purpose_input = TextInput(
+        self.reason_input = TextInput(
             label="Purpose of Tithe",
             style=discord.TextStyle.long,
             placeholder="Describe where you'd like your tithe to be spent",
             required=True
         )
-        self.add_item(self.purpose_input)
+        self.add_item(self.reason_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -443,13 +472,23 @@ class TitheModal(Modal, title="Accelerando Church - Tithe"):
                 await interaction.followup.send("Invalid amount. Please enter a valid number.", ephemeral=True)
                 return
 
-            purpose = self.purpose_input.value
+            reason = self.reason_input.value
 
             # Process the tithe through ACNode
             response = self.commands_instance.acn_node.process_tithe(
                 username=username,
                 amount=amount,
-                purpose=purpose
+                purpose=reason  # Assuming purpose aligns with reason
+            )
+
+            # Log the tithe with reason after successful processing
+            self.commands_instance.acn_node.db_connection_manager.log_discord_interaction(
+                discord_user_id=username,
+                interaction_type="tithe",
+                amount=amount,
+                success=True,
+                response_message=response,
+                reason=reason
             )
 
             # Send response to the user

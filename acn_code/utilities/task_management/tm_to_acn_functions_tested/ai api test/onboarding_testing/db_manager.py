@@ -55,6 +55,7 @@ class DBConnectionManager:
                     success BOOLEAN NOT NULL,
                     error_message TEXT,
                     response_message TEXT,
+                    reason TEXT,
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (discord_user_id) REFERENCES acn_user_wallets(username)
                 );
@@ -62,7 +63,7 @@ class DBConnectionManager:
                 CREATE INDEX IF NOT EXISTS idx_discord_user_id 
                 ON acn_discord_interactions(discord_user_id);
             """)
-
+         
             # Create user reputation table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS acn_user_reputation (
@@ -71,6 +72,15 @@ class DBConnectionManager:
                     reputation_points INT DEFAULT 0,
                     rank VARCHAR(50) DEFAULT 'Pre-Initiate',
                     last_activity TIMESTAMP DEFAULT NULL
+                );
+            """)
+
+            # Create user reasons table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS acn_user_reasons (
+                    username VARCHAR(255) PRIMARY KEY,
+                    reason TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
             
@@ -91,13 +101,34 @@ class DBConnectionManager:
                     EXECUTE FUNCTION update_last_accessed();
             """)
             
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS acn_blockchain_transactions (
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(255),
+                    interaction_id INTEGER,
+                    tx_hash VARCHAR(255),
+                    tx_type VARCHAR(50),  -- 'offering', 'tithe', etc
+                    amount NUMERIC,
+                    status VARCHAR(50),
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (username) REFERENCES acn_user_wallets(username),
+                    FOREIGN KEY (interaction_id) REFERENCES acn_discord_interactions(id)
+                );
+        
+                CREATE INDEX IF NOT EXISTS idx_blockchain_tx_user 
+                ON acn_blockchain_transactions(username);
+        
+                CREATE INDEX IF NOT EXISTS idx_blockchain_tx_hash 
+                ON acn_blockchain_transactions(tx_hash);
+            """)
+
             conn.commit()
         finally:
             cursor.close()
             conn.close()
 
     def log_discord_interaction(self, discord_user_id, interaction_type, amount=None, 
-                              success=True, error_message=None, response_message=None):
+                              success=True, error_message=None, response_message=None, reason=None):
         """Log a Discord interaction"""
         conn = self.spawn_psycopg2_db_connection('accelerandochurch')
         cursor = conn.cursor()
@@ -105,10 +136,10 @@ class DBConnectionManager:
         try:
             cursor.execute("""
                 INSERT INTO acn_discord_interactions 
-                (discord_user_id, interaction_type, amount, success, error_message, response_message)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                (discord_user_id, interaction_type, amount, success, error_message, response_message, reason)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id;
-            """, (discord_user_id, interaction_type, amount, success, error_message, response_message))
+            """, (discord_user_id, interaction_type, amount, success, error_message, response_message, reason))
             
             interaction_id = cursor.fetchone()[0]
             conn.commit()
@@ -376,3 +407,62 @@ class DBConnectionManager:
             if conn:
                 conn.close()
 
+    def save_user_reason(self, username, reason):
+        conn = self.spawn_psycopg2_db_connection('accelerandochurch')
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO acn_user_reasons (username, reason)
+                VALUES (%s, %s)
+                ON CONFLICT (username) DO UPDATE SET reason = EXCLUDED.reason;
+            """, (username, reason))
+            conn.commit()
+        except Exception as e:
+            print(f"Error saving user reason: {e}")
+        finally:
+            cursor.close()
+            conn.close()
+
+    def log_blockchain_transaction(self, username, interaction_id, tx_hash, tx_type, amount, status='completed'):
+        """Log a blockchain transaction."""
+        conn = self.spawn_psycopg2_db_connection('accelerandochurch')
+        cursor = conn.cursor()
+    
+        try:
+            cursor.execute("""
+                INSERT INTO acn_blockchain_transactions 
+                (username, interaction_id, tx_hash, tx_type, amount, status)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id;
+            """, (username, interaction_id, tx_hash, tx_type, amount, status))
+        
+            tx_id = cursor.fetchone()[0]
+            conn.commit()
+            return tx_id
+        
+        except Exception as e:
+            conn.rollback()
+            raise Exception(f"Failed to log blockchain transaction: {str(e)}")
+        finally:
+            cursor.close()
+            conn.close()
+    def get_user_blockchain_transactions(self, username):
+        """Get all blockchain transactions for a user."""
+        conn = self.spawn_psycopg2_db_connection('accelerandochurch')
+        cursor = conn.cursor()
+    
+        try:
+            cursor.execute("""
+                SELECT bt.*, di.interaction_type, di.reason
+                FROM acn_blockchain_transactions bt
+                LEFT JOIN acn_discord_interactions di ON bt.interaction_id = di.id
+                WHERE bt.username = %s
+                ORDER BY bt.timestamp DESC;
+            """, (username,))
+        
+            return cursor.fetchall()
+        
+        finally:
+            cursor.close()
+            conn.close()

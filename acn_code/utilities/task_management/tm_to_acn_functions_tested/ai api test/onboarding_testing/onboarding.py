@@ -139,32 +139,12 @@ class ACNode:
                 if not user_status['has_wallet']:
                     raise Exception("No existing wallet found. Please initiate with your seed.")
                 user_seed = user_status['stored_seed']
-    
+
             user_wallet = self.generic_acn_utilities.spawn_user_wallet_from_seed(user_seed)
-    
+
             # Store wallet for new users
             if not is_returning:
                 self.store_user_wallet(username, user_seed)
-    
-            # Construct memo with reason included if provided
-            memo_data = f"{offering_statement}. Reason: {reason}" if reason else offering_statement
-            offering_memo = self.generic_acn_utilities.construct_standardized_xrpl_memo(
-                memo_data=memo_data,
-                memo_format=username,
-                memo_type='AC_OFFERING_REQUEST_RETRY' if is_returning else 'AC_OFFERING_REQUEST'
-            )
-    
-            # Send the offering transaction
-            self.generic_acn_utilities.send_PFT_with_info(
-                sending_wallet=user_wallet,
-                amount=1,
-                destination_address=self.ACN_WALLET_ADDRESS,
-                memo=offering_memo
-            )
-
-            # Update rank and reputation
-            self.db_connection_manager.update_rank(username)
-            self.db_connection_manager.update_reputation(username, points_earned=50)  # Fixed to use amount directly
 
             # Generate initial offering AI response, including reason if provided
             ai_response = self.generate_initial_offering_response(
@@ -173,7 +153,46 @@ class ACNode:
                 reason=reason,
                 character_name=character_name
             )
-    
+
+            # Log Discord interaction first
+            interaction_id = self.db_connection_manager.log_discord_interaction(
+                discord_user_id=username,
+                interaction_type="offering",
+                amount=1,
+                success=True,
+                response_message=ai_response,
+                reason=reason
+            )
+
+            # Construct memo with reason included if provided
+            memo_data = f"{offering_statement}. Reason: {reason}" if reason else offering_statement
+            offering_memo = self.generic_acn_utilities.construct_standardized_xrpl_memo(
+                memo_data=memo_data,
+                memo_format=username,
+                memo_type='AC_OFFERING_REQUEST_RETRY' if is_returning else 'AC_OFFERING_REQUEST'
+            )
+
+            # Send the offering transaction
+            tx_response = self.generic_acn_utilities.send_PFT_with_info(
+                sending_wallet=user_wallet,
+                amount=1,
+                destination_address=self.ACN_WALLET_ADDRESS,
+                memo=offering_memo
+            )
+
+            # Log blockchain transaction
+            self.db_connection_manager.log_blockchain_transaction(
+                username=username,
+                interaction_id=interaction_id,
+                tx_hash=tx_response.result.get('hash'),
+                tx_type='initial_offering',
+                amount=1
+            )
+
+            # Update rank and reputation
+            self.db_connection_manager.update_rank(username)
+            self.db_connection_manager.update_reputation(username, points_earned=50)  # Fixed to use amount directly
+
             return ai_response
 
         except Exception as e:
@@ -412,7 +431,11 @@ class ACNode:
             raise Exception(f"Failed to retrieve initiation waiting period: {str(e)}")
 
     def process_tithe(self, username, amount, purpose):
-        """Process tithe interaction and generate LLM response."""
+        """Process tithe interaction and generate LLM response.
+    Note: The parameter `purpose` here is equivalent to `reason` used elsewhere
+    in the code (e.g., the modal input). The redundancy exists due to legacy naming
+    and will be standardized in the future.
+    """
         try:
             # Ensure the tithe amount is positive
             if amount <= 0:
@@ -467,11 +490,24 @@ class ACNode:
                 ]
             })["choices__message__content"][0]
 
-            # Combine responses
-            final_response = f"*{intro_response}*\n\n“{main_response}”"
+            # Combine responses with formatting
+            formatted_intro = f"*{intro_response}*"
+            formatted_main = f'"{main_response}"'  # Fixed quotation marks
+            final_response = f"{formatted_intro}\n\n{formatted_main}"
+
+            # Get the interaction_id from logging the Discord interaction
+            interaction_id = self.db_connection_manager.log_discord_interaction(
+                discord_user_id=username,
+                interaction_type="tithe",
+                amount=amount,
+                success=True,
+                response_message=final_response,
+                reason=purpose
+            )
+            
             # Process blockchain transaction
             user_wallet = self.get_user_wallet(username)
-            self.generic_acn_utilities.send_PFT_with_info(
+            tx_response = self.generic_acn_utilities.send_PFT_with_info(
                 sending_wallet=user_wallet,
                 amount=amount,
                 destination_address=self.ACN_WALLET_ADDRESS,
@@ -480,6 +516,18 @@ class ACNode:
                     memo_format=username,
                     memo_type="AC_TITHE"
                 )
+            )
+
+            # Extract hash from response
+            tx_hash = tx_response.result.get('hash')
+
+            # Log the blockchain transaction
+            self.db_connection_manager.log_blockchain_transaction(
+                username=username,
+                interaction_id=interaction_id,
+                tx_hash=tx_hash,
+                tx_type='tithe',
+                amount=amount
             )
 
             # Update reputation points for tithes
@@ -502,3 +550,30 @@ class ACNode:
         to promote the user to 'Acolyte' after successful ceremony completion.
         """
         pass
+    
+    def process_submit_offering(self, username, amount, context, character_name):
+        """Process the blockchain transaction and logging for submit_offering command"""
+        try:
+            # Process blockchain transaction
+            user_wallet = self.get_user_wallet(username)
+        
+            # Construct memo
+            offering_memo = self.generic_acn_utilities.construct_standardized_xrpl_memo(
+                memo_data=f"MAIN_OFFERING:{amount}",
+                memo_format=username,
+                memo_type="AC_MAIN_OFFERING"
+            )
+        
+            # Send transaction
+            tx_response = self.generic_acn_utilities.send_PFT_with_info(
+                sending_wallet=user_wallet,
+                amount=amount,
+                destination_address=self.ACN_WALLET_ADDRESS,
+                memo=offering_memo
+            )
+        
+            return tx_response.result.get('hash')
+        
+        except Exception as e:
+            print(f"Error in process_submit_offering: {str(e)}")
+            raise
