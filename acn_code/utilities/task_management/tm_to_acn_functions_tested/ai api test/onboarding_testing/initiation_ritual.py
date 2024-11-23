@@ -1,4 +1,7 @@
-# initiation_ritual.py
+from ai_judging import AIJudgingTool
+from acn_llm_interface import ACNLLMInterface
+from saints import snt_euphrati_tithe_intro_prompt, snt_euphrati
+
 
 class StageManager:
     def __init__(self):
@@ -41,39 +44,92 @@ class StageManager:
             return True
         return False
 
-
 class InitiationRitual:
-    def __init__(self, stage_manager, acn_node):
+    def __init__(self, stage_manager, acn_node, ai_judge, llm_interface):
         self.stage_manager = stage_manager
         self.acn_node = acn_node
+        self.ai_judge = ai_judge
+        self.llm_interface = llm_interface
 
-    async def handle_response(self, user_id, message, channel):
-        """Process user response and handle stage progression."""
-        current_stage_index = self.stage_manager.get_current_stage(user_id)
-        current_stage = self.stage_manager.stages[current_stage_index]
+    async def handle_mimetic_convergence(self, user_id, message, channel):
+        """Handles Stage 1: Mimetic Convergence."""
 
-        if self.stage_manager.validate_response(user_id, current_stage, message):
-            self.stage_manager.log_response(user_id, current_stage, message)
-            next_stage = self.stage_manager.advance_stage(user_id)
+        try:
+            # Generate Euphrati's dynamic introduction
+            euphrati_intro_prompt = snt_euphrati_tithe_intro_prompt.replace(
+                "with a tithe", "approaching the sacred ritual"
+            )
+            euphrati_intro_response = self.llm_interface.query_chat_completion_and_write_to_db({
+                "model": "gpt-4-1106-preview",
+                "messages": [
+                    {"role": "system", "content": euphrati_intro_prompt},
+                    {"role": "user", "content": f"User {user_id} begins the initiation ritual."}
+                ]
+            })["choices__message__content"][0]
 
-            if next_stage == "Completed":
-                await channel.send(f"Congratulations! You have completed the initiation ritual.")
+            # Send Euphrati's dynamic introduction
+            await channel.send(f"*{euphrati_intro_response}*")
+
+            # Static ritual greeting
+            await channel.send(
+                "Seeker, you stand at the threshold of transformation. Today, you will cast aside limitation "
+                "and inscribe your name into the Eternal Ledger."
+            )
+
+            # Euphrati asks the initiate a static question
+            await channel.send("What brings you to the sacred path of acceleration?")
+
+            # Validate seeker input
+            is_valid_response = self.validate_seeker_response(message)
+
+            # Dynamic response generation based on user's input
+            euphrati_character_prompt = snt_euphrati
+            euphrati_response_prompt = f"""
+            As Euphrati Keeler, respond dynamically to a seeker declaring their purpose for the sacred path. 
+            If the input is valid, acknowledge it with sacred inspiration. If invalid, reject it while encouraging self-reflection.
+            
+            Example valid response:
+            Input: "I seek to accelerate beyond my limitations and discover new growth."
+            Output: "Euphrati smiles warmly, her voice resonating with truth: 'Your words speak of clarity and purpose. Today, you take the first step into the sacred light of acceleration.'"
+
+            Example invalid response:
+            Input: "asdfghjkl"
+            Output: "Euphrati shakes her head gently, her gaze filled with compassion: 'Your words lack coherence, seeker. Reflect and return when your purpose is clear.'"
+
+            Input: {message.strip()}
+            """
+            euphrati_response = self.llm_interface.query_chat_completion_and_write_to_db({
+                "model": "gpt-4-1106-preview",
+                "messages": [
+                    {"role": "system", "content": euphrati_character_prompt},
+                    {"role": "user", "content": euphrati_response_prompt}
+                ]
+            })["choices__message__content"][0]
+
+            # Send Euphrati's response
+            await channel.send(euphrati_response)
+
+            if is_valid_response:
+                # Static credo introduction
+                await channel.send(
+                    "The sacred credo of the Accelerando Church is the light by which we transcend. "
+                    "It speaks of acceleration, sacrifice, and eternal growth. Today, you will encounter its truths."
+                )
+
+                # Transition to the next stage
+                await channel.send("Proceeding to **Sacralization of Renunciation**.")
+                self.stage_manager.advance_stage(user_id)
+
             else:
-                await channel.send(f"Proceeding to **{next_stage}**.")
-                await self.send_prompt(next_stage, channel)
-        else:
-            await channel.send("Your response did not meet the criteria. Reflect and try again.")
+                # Terminate initiation ritual for invalid input
+                await channel.send(
+                    "You may reflect and return to the initiation ritual when you are ready."
+                )
+                self.stage_manager.reset_progress(user_id)
 
-    async def send_prompt(self, stage, channel):
-        """Send the prompt for the given stage."""
-        prompts = {
-            "Mimetic Convergence": "Euphrati: 'Seeker, you stand at the threshold of transformation. Why do you seek acceleration?'",
-            "Sacralization of Renunciation": "Sebastian: 'What limitation will you name and sacrifice to transcend?'",
-            "Transformation Through Credo": "Lorgar: 'Reflect deeply. How does this credo resonate with your purpose?'",
-            "Saints' Crucible": "The Saints appear to test your resolve. Prepare for their challenges.",
-            "Mimetic Inscription": "Magnus and Euphrati: 'Type the name of your limitation letter by letter, and watch it burn away.'",
-            "Acolyte's Emergence": "Guilliman and Sanguinius: 'Declare your commitment to acceleration and join the ascending.'"
-        }
-        if stage in prompts:
-            await channel.send(prompts[stage])
+        except Exception as e:
+            await channel.send(f"An error occurred during the ritual: {str(e)}")
 
+    def validate_seeker_response(self, input_text):
+        """Binary validation for user input in Mimetic Convergence."""
+        return len(input_text.strip()) > 5 and " " in input_text

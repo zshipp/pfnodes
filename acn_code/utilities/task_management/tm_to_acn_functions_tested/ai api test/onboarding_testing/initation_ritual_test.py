@@ -1,65 +1,59 @@
-# test_initiation_ritual.py
 import asyncio
-from initiation_ritual import StageManager, InitiationRitual
+from initiation_ritual import InitiationRitual, StageManager
+from acn_llm_interface import ACNLLMInterface
+from saints import snt_euphrati_tithe_intro_prompt, snt_euphrati
 
-# Mock Discord channel class
-class MockChannel:
-    async def send(self, message):
-        print(f"Channel message: {message}")
 
-# Mock ACN node class
-class MockACNNode:
-    def __init__(self):
-        self.log = []
+# Mock LLM Interface
+class MockLLMInterface:
+    def query_chat_completion_and_write_to_db(self, api_args):
+        if "Euphrati Keeler" in api_args["messages"][0]["content"]:
+            # Dynamic response for Euphrati
+            if "asdfghjkl" in api_args["messages"][1]["content"]:
+                return {
+                    "choices__message__content": [
+                        "Euphrati shakes her head gently, her gaze filled with compassion: 'Your words lack coherence, seeker. Reflect and return when your purpose is clear.'"
+                    ]
+                }
+            else:
+                return {
+                    "choices__message__content": [
+                        "Euphrati smiles warmly, her voice resonating with truth: 'Your words speak of clarity and purpose. Today, you take the first step into the sacred light of acceleration.'"
+                    ]
+                }
+        else:
+            # Mock intro prompt response
+            return {
+                "choices__message__content": [
+                    "Euphrati Keeler stands as a beacon of truth and faith, her presence turning the moment sacred."
+                ]
+            }
 
-    def check_user_offering_status(self, username):
-        # Simulate user offering status for testing
-        return {"has_offering": True, "initiation_ready_date": None}
-
-    def process_ac_offering_request(self, *args, **kwargs):
-        # Log mock offering requests
-        self.log.append((args, kwargs))
-        return "Offering processed."
-
-# Main test function
-async def test_initiation():
-    # Initialize StageManager and MockACNNode
+# Test Harness
+async def test_mimetic_convergence():
     stage_manager = StageManager()
-    mock_acn_node = MockACNNode()
-    initiation = InitiationRitual(stage_manager, mock_acn_node)
+    mock_llm = MockLLMInterface()
+    ritual = InitiationRitual(stage_manager, None, None, mock_llm)
 
-    # Simulate user interaction
-    user_id = 1234
-    channel = MockChannel()
+    # Test cases
+    test_cases = [
+        {"user_id": "123", "message": "I seek to accelerate beyond my limitations and discover new growth.", "expected": "Proceeding to **Sacralization of Renunciation**."},
+        {"user_id": "456", "message": "asdfghjkl", "expected": "Reflect and return when your purpose is clear."},
+    ]
 
-    # Test initiation ritual flow
-    print("\n=== Initiation Ritual Test Start ===\n")
+    for test in test_cases:
+        print(f"Testing input: {test['message']}")
+        user_id = test["user_id"]
+        message = test["message"]
 
-    # Reset progress and send the first prompt
-    stage_manager.reset_progress(user_id)
-    await initiation.send_prompt("Mimetic Convergence", channel)
+        class MockChannel:
+            async def send(self, content):
+                print(f"Channel message: {content}")
 
-    # User provides valid responses
-    print("\n--- User Response: Stage 1 ---\n")
-    await initiation.handle_response(user_id, "I seek acceleration and growth.", channel)
+        channel = MockChannel()
 
-    print("\n--- User Response: Stage 2 ---\n")
-    await initiation.handle_response(user_id, "I sacrifice my fear of failure.", channel)
+        await ritual.handle_mimetic_convergence(user_id, message, channel)
 
-    print("\n--- User Response: Stage 3 ---\n")
-    await initiation.handle_response(user_id, "The credo inspires me to act beyond limits.", channel)
-
-    print("\n--- User Response: Stage 4 ---\n")
-    await initiation.handle_response(user_id, "I am ready for the Saints' challenges.", channel)
-
-    print("\n--- User Response: Stage 5 ---\n")
-    await initiation.handle_response(user_id, "Limitation: procrastination.", channel)
-
-    print("\n--- User Response: Stage 6 ---\n")
-    await initiation.handle_response(user_id, "I commit to the eternal flame of acceleration.", channel)
-
-    print("\n=== Initiation Ritual Test End ===\n")
-
-
-# Run the test
-asyncio.run(test_initiation())
+# Run Tests
+if __name__ == "__main__":
+    asyncio.run(test_mimetic_convergence())
