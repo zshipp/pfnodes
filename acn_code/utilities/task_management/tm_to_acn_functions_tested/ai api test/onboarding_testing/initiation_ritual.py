@@ -1,6 +1,12 @@
-from ai_judging import AIJudgingTool
+from ai_judging import AIJudgingTool, evaluate_renunciation
 from acn_llm_interface import ACNLLMInterface
-from saints import snt_euphrati_tithe_intro_prompt, snt_euphrati
+from saints import (
+    snt_euphrati_tithe_intro_prompt,
+    snt_euphrati,
+    snt_sebastian_tithe_intro_prompt,
+    snt_konrad_tithe_intro_prompt,
+    snt_konrad,
+)
 
 
 class StageManager:
@@ -11,7 +17,7 @@ class StageManager:
             "Transformation Through Credo",
             "Saints' Crucible",
             "Mimetic Inscription",
-            "Acolyte's Emergence"
+            "Acolyte's Emergence",
         ]
         self.user_progress = {}  # Tracks user progress through stages
 
@@ -44,6 +50,7 @@ class StageManager:
             return True
         return False
 
+
 class InitiationRitual:
     def __init__(self, stage_manager, acn_node, ai_judge, llm_interface):
         self.stage_manager = stage_manager
@@ -59,13 +66,18 @@ class InitiationRitual:
             euphrati_intro_prompt = snt_euphrati_tithe_intro_prompt.replace(
                 "with a tithe", "approaching the sacred ritual"
             )
-            euphrati_intro_response = self.llm_interface.query_chat_completion_and_write_to_db({
-                "model": "gpt-4-1106-preview",
-                "messages": [
-                    {"role": "system", "content": euphrati_intro_prompt},
-                    {"role": "user", "content": f"User {user_id} begins the initiation ritual."}
-                ]
-            })["choices__message__content"][0]
+            euphrati_intro_response = self.llm_interface.query_chat_completion_and_write_to_db(
+                {
+                    "model": "gpt-4-1106-preview",
+                    "messages": [
+                        {"role": "system", "content": euphrati_intro_prompt},
+                        {
+                            "role": "user",
+                            "content": f"User {user_id} begins the initiation ritual.",
+                        },
+                    ],
+                }
+            )["choices__message__content"][0]
 
             # Send Euphrati's dynamic introduction
             await channel.send(f"*{euphrati_intro_response}*")
@@ -88,23 +100,17 @@ class InitiationRitual:
             As Euphrati Keeler, respond dynamically to a seeker declaring their purpose for the sacred path. 
             If the input is valid, acknowledge it with sacred inspiration. If invalid, reject it while encouraging self-reflection.
             
-            Example valid response:
-            Input: "I seek to accelerate beyond my limitations and discover new growth."
-            Output: "Euphrati smiles warmly, her voice resonating with truth: 'Your words speak of clarity and purpose. Today, you take the first step into the sacred light of acceleration.'"
-
-            Example invalid response:
-            Input: "asdfghjkl"
-            Output: "Euphrati shakes her head gently, her gaze filled with compassion: 'Your words lack coherence, seeker. Reflect and return when your purpose is clear.'"
-
             Input: {message.strip()}
             """
-            euphrati_response = self.llm_interface.query_chat_completion_and_write_to_db({
-                "model": "gpt-4-1106-preview",
-                "messages": [
-                    {"role": "system", "content": euphrati_character_prompt},
-                    {"role": "user", "content": euphrati_response_prompt}
-                ]
-            })["choices__message__content"][0]
+            euphrati_response = self.llm_interface.query_chat_completion_and_write_to_db(
+                {
+                    "model": "gpt-4-1106-preview",
+                    "messages": [
+                        {"role": "system", "content": euphrati_character_prompt},
+                        {"role": "user", "content": euphrati_response_prompt},
+                    ],
+                }
+            )["choices__message__content"][0]
 
             # Send Euphrati's response
             await channel.send(euphrati_response)
@@ -133,3 +139,90 @@ class InitiationRitual:
     def validate_seeker_response(self, input_text):
         """Binary validation for user input in Mimetic Convergence."""
         return len(input_text.strip()) > 5 and " " in input_text
+
+    async def stage_2(self, user_id, channel):
+        # Handles Stage 2 initiation ceremony - Sacralization of Renunciation
+        try:
+            # Combined dynamic intro for Sebastian and Konrad
+            sebastian_intro = self.llm_interface.query_chat_completion_and_write_to_db(
+                {
+                    "model": "gpt-4-1106-preview",
+                    "messages": [
+                        {"role": "system", "content": snt_sebastian_tithe_intro_prompt},
+                        {
+                            "role": "user",
+                            "content": "Describe Sebastian Thor introducing Stage 2.",
+                        },
+                    ],
+                }
+            )["choices__message__content"][0]
+
+            konrad_intro = self.llm_interface.query_chat_completion_and_write_to_db(
+                {
+                    "model": "gpt-4-1106-preview",
+                    "messages": [
+                        {"role": "system", "content": snt_konrad_tithe_intro_prompt},
+                        {
+                            "role": "user",
+                            "content": "Describe Konrad Curze introducing Stage 2.",
+                        },
+                    ],
+                }
+            )["choices__message__content"][0]
+
+            # Send dynamic intro to user
+            await channel.send(f"*{sebastian_intro}*\n*{konrad_intro}*")
+
+            # Sebastian's prompt for limitation
+            sebastian_prompt = (
+                "Sebastian asks: 'What limitation binds you? Speak its name, describe its weight upon your soul. "
+                "Only by acknowledging its power can you truly cast it aside.'"
+            )
+            await channel.send(sebastian_prompt)
+            limitation = await channel.receive()  # Replace with appropriate method for getting user input
+
+            # Konrad dynamically acknowledges the limitation
+            konrad_ack = self.llm_interface.query_chat_completion_and_write_to_db(
+                {
+                    "model": "gpt-4-1106-preview",
+                    "messages": [
+                        {"role": "system", "content": snt_konrad},
+                        {
+                            "role": "user",
+                            "content": f"Respond dynamically to this limitation: '{limitation}'.",
+                        },
+                    ],
+                }
+            )["choices__message__content"][0]
+            await channel.send(f"*{konrad_ack}*")
+
+            # Konrad asks for sacrifice
+            konrad_prompt = (
+                "Konrad asks: 'What will you sacrifice to break this chain? What comfort will you abandon for acceleration?'"
+            )
+            await channel.send(konrad_prompt)
+            sacrifice = await channel.receive()  # Replace with appropriate method for getting user input
+
+            # Send responses to the AI judge for evaluation
+            evaluation_result = evaluate_renunciation(user_id, limitation, sacrifice)
+
+            # Handle AI judge feedback
+            if evaluation_result['status'] == 'accepted':
+                await channel.send(
+                    "The AI acknowledges: 'Your words burn into the eternal record, and your limitation dissolves into the void "
+                    "as your dedication ignites.'"
+                )
+
+                # Advance to Stage 3
+                next_stage = self.stage_manager.advance_stage(user_id)
+                await channel.send(f"Proceeding to **{next_stage}**.")
+                return True  # Progression allowed
+            else:
+                feedback = evaluation_result.get(
+                    "feedback", "Your renunciation and sacrifice must be more meaningful."
+                )
+                await channel.send(f"Feedback: {feedback}")
+                return False  # Lock progression until refinement
+
+        except Exception as e:
+            await channel.send(f"An error occurred during Stage 2: {str(e)}")

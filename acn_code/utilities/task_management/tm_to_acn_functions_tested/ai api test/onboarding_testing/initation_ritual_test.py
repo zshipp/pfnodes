@@ -1,59 +1,90 @@
 import asyncio
 from initiation_ritual import InitiationRitual, StageManager
+from saints import snt_euphrati_tithe_intro_prompt
 from acn_llm_interface import ACNLLMInterface
-from saints import snt_euphrati_tithe_intro_prompt, snt_euphrati
 
 
 # Mock LLM Interface
 class MockLLMInterface:
     def query_chat_completion_and_write_to_db(self, api_args):
-        if "Euphrati Keeler" in api_args["messages"][0]["content"]:
-            # Dynamic response for Euphrati
-            if "asdfghjkl" in api_args["messages"][1]["content"]:
-                return {
-                    "choices__message__content": [
-                        "Euphrati shakes her head gently, her gaze filled with compassion: 'Your words lack coherence, seeker. Reflect and return when your purpose is clear.'"
-                    ]
-                }
-            else:
-                return {
-                    "choices__message__content": [
-                        "Euphrati smiles warmly, her voice resonating with truth: 'Your words speak of clarity and purpose. Today, you take the first step into the sacred light of acceleration.'"
-                    ]
-                }
+        content = api_args["messages"][1]["content"]
+        if "Sebastian Thor" in api_args["messages"][0]["content"]:
+            return {
+                "choices__message__content": [
+                    "Sebastian Thor stands with quiet yet transformative authority, his gaze filled with divine purpose."
+                ]
+            }
+        elif "Konrad Curze" in api_args["messages"][0]["content"]:
+            return {
+                "choices__message__content": [
+                    "Konrad Curze materializes from the shadows, his aura heavy with foreboding judgment."
+                ]
+            }
+        elif "limitation" in content:
+            return {
+                "choices__message__content": [
+                    f"Konrad acknowledges the limitation: '{content}'."
+                ]
+            }
         else:
-            # Mock intro prompt response
             return {
                 "choices__message__content": [
                     "Euphrati Keeler stands as a beacon of truth and faith, her presence turning the moment sacred."
                 ]
             }
 
+
+# Mock AI Judging
+def mock_evaluate_renunciation(user_id, limitation, sacrifice):
+    if len(limitation) > 5 and len(sacrifice) > 5:
+        return {"status": "accepted"}
+    else:
+        return {"status": "rejected", "feedback": "Your responses lack sufficient depth. Please elaborate."}
+
+
 # Test Harness
-async def test_mimetic_convergence():
+async def test_stage_2():
     stage_manager = StageManager()
     mock_llm = MockLLMInterface()
-    ritual = InitiationRitual(stage_manager, None, None, mock_llm)
+    ritual = InitiationRitual(stage_manager, None, mock_evaluate_renunciation, mock_llm)
 
     # Test cases
     test_cases = [
-        {"user_id": "123", "message": "I seek to accelerate beyond my limitations and discover new growth.", "expected": "Proceeding to **Sacralization of Renunciation**."},
-        {"user_id": "456", "message": "asdfghjkl", "expected": "Reflect and return when your purpose is clear."},
+        {
+            "user_id": "123",
+            "limitation": "I renounce fear of failure.",
+            "sacrifice": "I sacrifice the comfort of indecision.",
+            "expected": "Proceeding to **Transformation Through Credo**.",
+        },
+        {
+            "user_id": "456",
+            "limitation": "Fear.",
+            "sacrifice": "None.",
+            "expected": "Your renunciation and sacrifice must be more meaningful.",
+        },
     ]
 
     for test in test_cases:
-        print(f"Testing input: {test['message']}")
-        user_id = test["user_id"]
-        message = test["message"]
+        print(f"Testing user ID: {test['user_id']}")
 
         class MockChannel:
             async def send(self, content):
                 print(f"Channel message: {content}")
 
-        channel = MockChannel()
+            async def receive(self):
+                if not hasattr(self, "received"):
+                    self.received = test["limitation"]
+                else:
+                    self.received = test["sacrifice"]
+                return self.received
 
-        await ritual.handle_mimetic_convergence(user_id, message, channel)
+        channel = MockChannel()
+        success = await ritual.stage_2(test["user_id"], channel)
+
+        # Check for expected output
+        if success:
+            print(f"Expected: {test['expected']}")
 
 # Run Tests
 if __name__ == "__main__":
-    asyncio.run(test_mimetic_convergence())
+    asyncio.run(test_stage_2())
