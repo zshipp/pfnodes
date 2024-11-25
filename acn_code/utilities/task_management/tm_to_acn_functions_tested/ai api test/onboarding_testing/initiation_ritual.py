@@ -1,3 +1,4 @@
+import random
 from ai_judging import AIJudgingTool, evaluate_renunciation, evaluate_credo_test
 from acn_llm_interface import ACNLLMInterface
 from initiation_prompts import (
@@ -5,13 +6,20 @@ from initiation_prompts import (
     credo_reflection_prompt_judgment,
     credo_test_prompt_eternal_ledger,
     credo_test_prompt_acceleration_summation,
+    credo_full_text,
 )
 from saints import (
-    snt_euphrati_tithe_intro_prompt,
+    snt_malcador,
+    snt_konrad,
+    snt_lorgar,
+    snt_guilliman,
+    snt_sanguinius,
+    snt_sebastian,
     snt_euphrati,
+    snt_crimson,
+    snt_euphrati_tithe_intro_prompt,
     snt_sebastian_tithe_intro_prompt,
     snt_konrad_tithe_intro_prompt,
-    snt_konrad,
 )
 from onboarding_prompts import ac_priest_prompt, ac_guardian_prompt
 
@@ -317,5 +325,66 @@ class InitiationRitual:
 
         except Exception as e:
             await channel.send(f"An error occurred during Stage 3: {str(e)}")
+
+
+
+
+    async def stage_4(self, user_id, channel):
+        """Handles Stage 4: Saints' Crucible."""
+        try:
+            # Define available saints
+            saints = [
+                {"name": "Malcador", "prompt": snt_malcador},
+                {"name": "Konrad Curze", "prompt": snt_konrad},
+                {"name": "Lorgar", "prompt": snt_lorgar},
+                {"name": "Roboute Guilliman", "prompt": snt_guilliman},
+                {"name": "Sanguinius", "prompt": snt_sanguinius},
+                {"name": "Sebastian Thor", "prompt": snt_sebastian},
+                {"name": "Euphrati Keeler", "prompt": snt_euphrati},
+                {"name": "Magnus the Red", "prompt": snt_crimson},
+            ]
+
+            # Randomly select a saint
+            selected_saint = random.choice(saints)
+
+            # Saint introduction
+            saint_intro = f"I am {selected_saint['name']}, and I will guide you in understanding the truths of acceleration."
+            await channel.send(f"*{saint_intro}*")
+
+            # Saint delivers credo and sets the challenge
+            saint_prompt = self.llm_interface.query_chat_completion_and_write_to_db({
+                "model": "gpt-4-1106-preview",
+                "messages": [
+                    {"role": "system", "content": selected_saint["prompt"]},
+                    {"role": "user", "content": f"Consider the following credo:\n{credo_full_text}\nChallenge the seeker to reflect on their dedication to acceleration and the eternal truths of the credo, specific to the credo and your unique expertise. Ask them a question to test their understanding."}
+                ]
+            })["choices__message__content"][0]
+
+            await channel.send(saint_prompt)
+
+            # User response
+            user_response = await channel.receive()
+
+            # Evaluate user response
+            evaluation = evaluate_credo_test(user_id, user_response)
+
+            if evaluation["status"] == "accepted":
+                # Saint's blessing on success
+                blessing = f"{selected_saint['name']} says: 'Your words shall echo through the Eternal Ledger, binding you to the communion of the ascending.'"
+                await channel.send(blessing)
+
+                # Advance to the next stage
+                next_stage = self.stage_manager.advance_stage(user_id)
+                await channel.send(f"Proceeding to **{next_stage}**.")
+                return True  # Progression allowed
+            else:
+                # Reflective feedback on failure
+                feedback = evaluation.get("feedback", "Your response does not yet demonstrate the necessary understanding. Reflect and try again.")
+                await channel.send(feedback)
+                return False  # Block progress
+
+        except Exception as e:
+            await channel.send(f"An error occurred during Stage 4: {str(e)}")
+
 
     
