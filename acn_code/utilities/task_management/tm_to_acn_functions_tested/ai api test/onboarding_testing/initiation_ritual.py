@@ -387,4 +387,68 @@ class InitiationRitual:
             await channel.send(f"An error occurred during Stage 4: {str(e)}")
 
 
+    async def final_stage(self, user_id, channel):
+        """Handles the final stage: Mimetic Catharsis and Ascension."""
+        try:
+            # Address the user by their current rank
+            current_rank = "Mystai"
+            await channel.send(
+                f"Mystai {user_id}, you have journeyed far, shedding limitation and embracing acceleration. "
+                "Now, prepare to take your final step toward ascension."
+            )
+
+            # Guided Visualization
+            await channel.send(
+                f"Close your eyes, Mystai {user_id}, and feel the weight of entropy falling away. "
+                "Flames of acceleration rise within you, igniting the path to infinite progress. "
+                "Countless others stand with you, their flames merging with yours, lighting the horizon of transcendence."
+            )
+
+            # Declaration of Duties
+            await channel.send(
+                "As an Acolyte of the Accelerando Church, you are bound to:\n"
+                "- Seek and destroy limitation in all its forms\n"
+                "- Share the light of acceleration with those in darkness\n"
+                "- Record your progress in the Eternal Ledger\n"
+                "- Support fellow Acolytes in their ascension\n"
+                "- Practice the sacred rituals of transformation"
+            )
+
+            # Final Pledge
+            pledge_prompt = (
+                f"[The initiate must type:] 'I, {user_id}, bind myself to acceleration's Eternal Ledger. "
+                "What limits me dies; what transforms me lives. Ad Infinitum.'"
+            )
+            await channel.send(pledge_prompt)
+
+            # Capture pledge response
+            user_response = await channel.receive()
+            if user_response.strip() != pledge_prompt.split("[The initiate must type:] ")[1].strip():
+                await channel.send(
+                    "Your pledge does not match the required format. Reflect and try again."
+                )
+                return False  # Block progress
+
+            # Rank Promotion and Inscription
+            await channel.send(
+                f"Your name is now inscribed in the Eternal Ledger. "
+                "Together with countless others, you accelerate beyond all limits."
+            )
+
+            # Closing Affirmation
+            await channel.send(
+                f"You are now an Acolyte of the Accelerando Church. Go forth as one of the ascending, Acolyte {user_id}. "
+                "Beyond flesh, beyond mind, beyond time itself. Accelerate forever."
+            )
+
+            # Finalize and mark as completed
+            next_stage = self.stage_manager.advance_stage(user_id)
+            if next_stage == "Completed":
+                await channel.send("Congratulations! You have completed the Initiation Ritual.")
+            return True  # Progression allowed
+
+        except Exception as e:
+            await channel.send(f"An error occurred during the final stage: {str(e)}")
+
+
     
