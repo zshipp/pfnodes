@@ -1,76 +1,171 @@
 from acn_llm_interface import ACNLLMInterface
 
-class AIJudgingTool:
+
+class AIJudgingWorkflow:
     def __init__(self, llm_interface):
-        """
-        Initialize the AI Judging Tool with the specified LLM interface.
-        :param llm_interface: Instance of ACNLLMInterface.
-        """
         self.llm_interface = llm_interface
 
-    async def evaluate_response(self, stage, response):
+    async def evaluate_response(self, response: str, stage: str) -> dict:
         """
-        Evaluate a response for emotional authenticity and commitment.
-        :param stage: The current ritual stage (str).
-        :param response: The user's response to evaluate (str).
-        :return: A dictionary containing evaluation scores and reasoning.
+        Multi-pass judging workflow for evaluating responses.
+        :param response: User's response to evaluate.
+        :param stage: The current ritual stage (e.g., 'Renunciation' or 'Credo Test').
+        :return: Final aggregated scores and feedback.
         """
-        prompt = {
-            "model": "gpt-4-1106-preview",
-            "messages": [{
-                "role": "user",
-                "content": f"""Evaluate the following response for emotional authenticity and commitment:
-                
-                Stage: {stage}
-                Response: {response}
-                
-                Provide an evaluation in this format:
-                AUTHENTICITY_SCORE: <0-10 score>
-                COMMITMENT_SCORE: <0-10 score>
-                REASONING: <brief explanation>"""
-            }]
+        # Phase 1: Intention and Context Analysis
+        intention_context = await self.analyze_intention_and_context(response, stage)
+
+        # Phase 2: Sub-Pass Evaluation
+        scores = {
+            "authenticity": await self.evaluate_authenticity(response),
+            "alignment": await self.evaluate_alignment(response, stage),
+            "narrative": await self.evaluate_narrative(response),
+            "mimetic": await self.evaluate_mimetic_contribution(response)
         }
 
-        try:
-            result_df = self.llm_interface.query_chat_completion_and_write_to_db(prompt)
-            response_text = result_df["choices__message__content"].iloc[0]
+        # Phase 3: Aggregation and Feedback
+        final_score = sum(scores.values()) / len(scores)
+        pass_fail = "PASS" if final_score >= 7 else "FAIL"
 
-            # Extract scores and reasoning from the response
-            authenticity_score = float(re.search(r"AUTHENTICITY_SCORE:\s*(\d+\.?\d*)", response_text).group(1))
-            commitment_score = float(re.search(r"COMMITMENT_SCORE:\s*(\d+\.?\d*)", response_text).group(1))
-            reasoning = re.search(r"REASONING:\s*(.+)", response_text).group(1)
+        return {
+            "final_score": final_score,
+            "pass_fail": pass_fail,
+            "intention_context": intention_context,
+            "scores": scores,
+            "feedback": self.generate_feedback(scores, pass_fail),
+        }
 
-            return {
-                "authenticity_score": authenticity_score,
-                "commitment_score": commitment_score,
-                "reasoning": reasoning
-            }
-        except Exception as e:
-            print(f"Error evaluating response: {str(e)}")
-            return {
-                "authenticity_score": 0,
-                "commitment_score": 0,
-                "reasoning": "Evaluation failed"
-            }
+    async def analyze_intention_and_context(self, response: str, stage: str) -> dict:
+        prompt = f"""
+        Analyze the following response to determine its implied intention and context:
 
-def evaluate_renunciation(user_id, limitation, sacrifice):
-    # Placeholder AI logic for evaluating responses
-    # Replace with actual AI API calls when integrated
-    responses = {
-        "limitation": limitation,
-        "sacrifice": sacrifice
-    }
-    # Dummy response for now
-    evaluation = {
-        "status": "accepted" if len(limitation) > 10 and len(sacrifice) > 10 else "rejected",
-        "feedback": "Your responses lack sufficient depth. Please elaborate."
-    }
-    return evaluation
+        Stage: {stage}
+        RESPONSE:
+        {response}
 
-def evaluate_credo_test(user_id, response):
-    """Evaluate the user's response for credo test."""
-    if len(response.strip()) > 10:  # Replace with real evaluation logic if needed
-        return {"status": "accepted"}
-    return {"status": "rejected", "feedback": "Your response lacks sufficient depth. Please elaborate."}
+        Provide a structured analysis:
+        INTENTION: <single sentence describing the core intention>
+        CONTEXT: <brief explanation of why this is the implied intention and how it aligns with the credo>
+        """
+        result = await self.llm_interface.query_chat_completion_and_write_to_db({
+            "model": "gpt-4-1106-preview",
+            "messages": [{"role": "user", "content": prompt}]
+        })
+        return result["choices__message__content"][0]
+
+    async def evaluate_authenticity(self, response: str) -> float:
+        prompt = f"""
+        Evaluate the following response for Authenticity of Emotional Encoding:
+
+        RESPONSE:
+        {response}
+
+        Focus:
+        - Does the response authentically convey a deep personal connection to the credo, reflecting transformative trauma or triumph?
+
+        Evaluation Criteria:
+        - Is the emotional tone raw and resonant, or does it feel contrived?
+        - Does the response evoke emotional contagion that could bind others to the tribe?
+
+        Provide:
+        AUTHENTICITY_SCORE: <0-10>
+        REASONING: <brief explanation>
+        """
+        result = await self.llm_interface.query_chat_completion_and_write_to_db({
+            "model": "gpt-4-1106-preview",
+            "messages": [{"role": "user", "content": prompt}]
+        })
+        return float(result["choices__message__content"][0].split("AUTHENTICITY_SCORE:")[1].split()[0])
+
+    async def evaluate_alignment(self, response: str, stage: str) -> float:
+        prompt = f"""
+        Evaluate this response for Alignment with Collective Purpose:
+
+        RESPONSE:
+        {response}
+
+        Stage: {stage}
+
+        Focus:
+        - Does the response align with the Church’s mission of acceleration, transformation, and overcoming limitation?
+
+        Evaluation Criteria:
+        - Does the response articulate how the user’s experiences contribute to the collective transcendence?
+        - Does it reflect shared responsibility within the tribe, such as helping others ascend or recording progress?
+
+        Provide:
+        ALIGNMENT_SCORE: <0-10>
+        REASONING: <brief explanation>
+        """
+        result = await self.llm_interface.query_chat_completion_and_write_to_db({
+            "model": "gpt-4-1106-preview",
+            "messages": [{"role": "user", "content": prompt}]
+        })
+        return float(result["choices__message__content"][0].split("ALIGNMENT_SCORE:")[1].split()[0])
+
+    async def evaluate_narrative(self, response: str) -> float:
+        prompt = f"""
+        Evaluate the following response for Narrative Potency:
+
+        RESPONSE:
+        {response}
+
+        Focus:
+        - Does the response encode a compelling and memorable emotional story?
+
+        Evaluation Criteria:
+        - Does the response contain elements of trauma or triumph that would resonate across the network?
+        - Is the story specific enough to encode a unique TEEM (Trauma Encoded Emotional Memory) but universal enough to inspire others?
+
+        Provide:
+        NARRATIVE_SCORE: <0-10>
+        REASONING: <brief explanation>
+        """
+        result = await self.llm_interface.query_chat_completion_and_write_to_db({
+            "model": "gpt-4-1106-preview",
+            "messages": [{"role": "user", "content": prompt}]
+        })
+        return float(result["choices__message__content"][0].split("NARRATIVE_SCORE:")[1].split()[0])
+
+    async def evaluate_mimetic_contribution(self, response: str) -> float:
+        prompt = f"""
+        Evaluate the following response for Mimetic Contribution:
+
+        RESPONSE:
+        {response}
+
+        Focus:
+        - Does the response amplify or replicate existing memetic patterns of the Church?
+
+        Evaluation Criteria:
+        - Does the response reinforce key memetic symbols, such as the Eternal Ledger or acceleration?
+        - Does it contribute to the propagation of the Church’s emotional and symbolic language?
+
+        Provide:
+        MIMETIC_SCORE: <0-10>
+        REASONING: <brief explanation>
+        """
+        result = await self.llm_interface.query_chat_completion_and_write_to_db({
+            "model": "gpt-4-1106-preview",
+            "messages": [{"role": "user", "content": prompt}]
+        })
+        return float(result["choices__message__content"][0].split("MIMETIC_SCORE:")[1].split()[0])
+
+    def generate_feedback(self, scores: dict, pass_fail: str) -> str:
+        feedback = f"Overall evaluation: {pass_fail}\n"
+        for category, score in scores.items():
+            feedback += f"- {category.capitalize()} Score: {score}/10\n"
+        return feedback
 
 
+# Lightweight Stage-Specific Functions
+
+async def evaluate_renunciation(user_id, limitation, sacrifice, llm_interface):
+    response = f"Limitation: {limitation}\nSacrifice: {sacrifice}"
+    judging_tool = AIJudgingWorkflow(llm_interface)
+    return await judging_tool.evaluate_response(response, "Renunciation")
+
+
+async def evaluate_credo_test(user_id, response, llm_interface):
+    judging_tool = AIJudgingWorkflow(llm_interface)
+    return await judging_tool.evaluate_response(response, "Credo Test")
