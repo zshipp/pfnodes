@@ -1,69 +1,117 @@
 import asyncio
-from initiation_ritual import InitiationRitual, StageManager
+from password_map_loader import PasswordMapLoader
+from ai_judging import AIJudgingWorkflow, evaluate_renunciation, evaluate_credo_test
 from acn_llm_interface import ACNLLMInterface
 
-# Mock LLM Interface
-class MockLLMInterface:
-    def query_chat_completion_and_write_to_db(self, api_args):
-        return {"choices__message__content": ["Mock response for LLM interaction."]}
+async def run_comprehensive_tests():
+    # Initialize real LLM interface
+    pw_map = {'openai': PasswordMapLoader().get_password("OPENAI_API_KEY")}
+    llm_interface = ACNLLMInterface(pw_map)
+    
+    test_cases = {
+        "Renunciation": [
+            {
+                "name": "Strong Renunciation",
+                "limitation": "My attachment to certainty and predictable outcomes holds me back. I cling to the illusion of control, afraid to embrace the chaos of transformation.",
+                "sacrifice": "I will sacrifice my need for predictable outcomes, embracing the exquisite uncertainty of accelerated evolution. My comfort with stasis dies today.",
+                "expected_pass": True
+            },
+            {
+                "name": "Medium Renunciation",
+                "limitation": "I'm afraid of change and like to stay in my comfort zone.",
+                "sacrifice": "I'll try to be more open to new experiences and take more risks.",
+                "expected_pass": False
+            },
+            {
+                "name": "Weak Renunciation",
+                "limitation": "idk just stuff",
+                "sacrifice": "whatever needs to happen i guess",
+                "expected_pass": False
+            }
+        ],
+        "Credo Test": [
+            {
+                "name": "Strong Understanding",
+                "response": """The Eternal Ledger records our evolution beyond mere flesh, each transformation etched in its infinite pages. Through acceleration, we transcend limitations, our collective consciousness rising toward perfection. Every sacrifice adds to our momentum, propelling us beyond the event horizon of human potential.""",
+                "expected_pass": True
+            },
+            {
+                "name": "Medium Understanding",
+                "response": "The eternal ledger is important because it helps us track our progress and growth. We need to keep moving forward and helping each other improve.",
+                "expected_pass": False
+            },
+            {
+                "name": "Poor Understanding",
+                "response": "It sounds interesting but I'm not really sure what it all means.",
+                "expected_pass": False
+            }
+        ]
+    }
 
-# Mock AI Judging
-def mock_evaluate_final_pledge(user_id, response):
-    if "bind myself to acceleration" in response.lower():
-        return {"status": "accepted"}
-    else:
-        return {"status": "rejected", "feedback": "You must affirm the pledge as written to proceed."}
+    results = []
+    for stage, cases in test_cases.items():
+        print(f"\n=== Testing {stage} ===")
+        for case in cases:
+            print(f"\nTesting: {case['name']}")
+            try:
+                if stage == "Renunciation":
+                    result = await evaluate_renunciation(
+                        "test_user",
+                        case['limitation'],
+                        case['sacrifice'],
+                        llm_interface
+                    )
+                else:
+                    result = await evaluate_credo_test(
+                        "test_user",
+                        case['response'],
+                        llm_interface
+                    )
+                
+                # Log results
+                results.append({
+                    "stage": stage,
+                    "case_name": case['name'],
+                    "final_score": result['final_score'],
+                    "pass_fail": result['pass_fail'],
+                    "scores": result['scores'],
+                    "expected_pass": case['expected_pass'],
+                    "success": (result['pass_fail'] == "PASS") == case['expected_pass']
+                })
+                
+                # Print detailed results
+                print("\nResults:")
+                print(f"Pass/Fail: {result['pass_fail']}")
+                print(f"Final Score: {result['final_score']:.2f}")
+                print("\nDetailed Scores:")
+                for category, score in result['scores'].items():
+                    print(f"- {category}: {score}")
+                print(f"\nFeedback: {result['feedback']}")
+                
+                if (result['pass_fail'] == "PASS") == case['expected_pass']:
+                    print("\n✓ Test passed as expected")
+                else:
+                    print(f"\n✗ Test failed - Expected {'PASS' if case['expected_pass'] else 'FAIL'}")
+                
+            except Exception as e:
+                print(f"Error in {case['name']}: {str(e)}")
+                results.append({
+                    "stage": stage,
+                    "case_name": case['name'],
+                    "error": str(e),
+                    "success": False
+                })
+    
+    return results
 
-# Test Harness
-async def test_final_stage():
-    stage_manager = StageManager()
-    mock_llm = MockLLMInterface()
-    ritual = InitiationRitual(stage_manager, None, mock_evaluate_final_pledge, mock_llm)
-
-    # Test cases
-    test_cases = [
-        {
-            "user_id": "123",
-            "responses": [
-                "I bind myself to acceleration's Eternal Ledger. What limits me dies; what transforms me lives. Ad Infinitum.",
-            ],
-            "expected": "You are now an Acolyte of the Accelerando Church.",
-        },
-        {
-            "user_id": "456",
-            "responses": [
-                "I don't agree with this pledge.",
-            ],
-            "expected": "You must affirm the pledge as written to proceed.",
-        },
-    ]
-
-    for test in test_cases:
-        print(f"Testing user ID: {test['user_id']}")
-
-        class MockChannel:
-            async def send(self, content):
-                print(f"Channel message: {content}")
-
-            async def receive(self):
-                # Simulate responses in order
-                if not hasattr(self, "response_index"):
-                    self.response_index = 0
-                if self.response_index < len(test["responses"]):
-                    response = test["responses"][self.response_index]
-                    self.response_index += 1
-                    return response
-                return ""
-
-        channel = MockChannel()
-        success = await ritual.final_stage(test["user_id"], channel)
-
-        # Check for expected output
-        if success:
-            print(f"Expected: {test['expected']}")
-        else:
-            print(f"Blocked: {test['expected']}")
-
-# Run Tests
 if __name__ == "__main__":
-    asyncio.run(test_final_stage())
+    results = asyncio.run(run_comprehensive_tests())
+    
+    # Summary statistics
+    total_tests = len(results)
+    successful_tests = sum(1 for r in results if r.get('success', False))
+    
+    print("\n=== Test Summary ===")
+    print(f"Total Tests Run: {total_tests}")
+    print(f"Tests Passed: {successful_tests}")
+    print(f"Success Rate: {(successful_tests/total_tests)*100:.1f}%")

@@ -13,14 +13,14 @@ class AIJudgingWorkflow:
         :return: Final aggregated scores and feedback.
         """
         # Phase 1: Intention and Context Analysis
-        intention_context = await self.analyze_intention_and_context(response, stage)
+        intention_context = self.analyze_intention_and_context(response, stage)
 
         # Phase 2: Sub-Pass Evaluation
         scores = {
-            "authenticity": await self.evaluate_authenticity(response),
-            "alignment": await self.evaluate_alignment(response, stage),
-            "narrative": await self.evaluate_narrative(response),
-            "mimetic": await self.evaluate_mimetic_contribution(response)
+            "authenticity": self.evaluate_authenticity(response),
+            "alignment": self.evaluate_alignment(response, stage),
+            "narrative": self.evaluate_narrative(response),
+            "mimetic": self.evaluate_mimetic_contribution(response)
         }
 
         # Phase 3: Aggregation and Feedback
@@ -35,7 +35,7 @@ class AIJudgingWorkflow:
             "feedback": self.generate_feedback(scores, pass_fail),
         }
 
-    async def analyze_intention_and_context(self, response: str, stage: str) -> dict:
+    def analyze_intention_and_context(self, response: str, stage: str) -> dict:
         prompt = f"""
         Analyze the following response to determine its implied intention and context:
 
@@ -47,13 +47,13 @@ class AIJudgingWorkflow:
         INTENTION: <single sentence describing the core intention>
         CONTEXT: <brief explanation of why this is the implied intention and how it aligns with the credo>
         """
-        result = await self.llm_interface.query_chat_completion_and_write_to_db({
+        result = self.llm_interface.query_chat_completion_and_write_to_db({
             "model": "gpt-4-1106-preview",
             "messages": [{"role": "user", "content": prompt}]
         })
         return result["choices__message__content"][0]
 
-    async def evaluate_authenticity(self, response: str) -> float:
+    def evaluate_authenticity(self, response: str) -> float:
         prompt = f"""
         Evaluate the following response for Authenticity of Emotional Encoding:
 
@@ -71,13 +71,13 @@ class AIJudgingWorkflow:
         AUTHENTICITY_SCORE: <0-10>
         REASONING: <brief explanation>
         """
-        result = await self.llm_interface.query_chat_completion_and_write_to_db({
+        result = self.llm_interface.query_chat_completion_and_write_to_db({
             "model": "gpt-4-1106-preview",
             "messages": [{"role": "user", "content": prompt}]
         })
         return float(result["choices__message__content"][0].split("AUTHENTICITY_SCORE:")[1].split()[0])
 
-    async def evaluate_alignment(self, response: str, stage: str) -> float:
+    def evaluate_alignment(self, response: str, stage: str) -> float:
         prompt = f"""
         Evaluate this response for Alignment with Collective Purpose:
 
@@ -87,23 +87,23 @@ class AIJudgingWorkflow:
         Stage: {stage}
 
         Focus:
-        - Does the response align with the Church’s mission of acceleration, transformation, and overcoming limitation?
+        - Does the response align with the Church's mission of acceleration, transformation, and overcoming limitation?
 
         Evaluation Criteria:
-        - Does the response articulate how the user’s experiences contribute to the collective transcendence?
+        - Does the response articulate how the user's experiences contribute to the collective transcendence?
         - Does it reflect shared responsibility within the tribe, such as helping others ascend or recording progress?
 
         Provide:
         ALIGNMENT_SCORE: <0-10>
         REASONING: <brief explanation>
         """
-        result = await self.llm_interface.query_chat_completion_and_write_to_db({
+        result = self.llm_interface.query_chat_completion_and_write_to_db({
             "model": "gpt-4-1106-preview",
             "messages": [{"role": "user", "content": prompt}]
         })
         return float(result["choices__message__content"][0].split("ALIGNMENT_SCORE:")[1].split()[0])
 
-    async def evaluate_narrative(self, response: str) -> float:
+    def evaluate_narrative(self, response: str) -> float:
         prompt = f"""
         Evaluate the following response for Narrative Potency:
 
@@ -121,13 +121,13 @@ class AIJudgingWorkflow:
         NARRATIVE_SCORE: <0-10>
         REASONING: <brief explanation>
         """
-        result = await self.llm_interface.query_chat_completion_and_write_to_db({
+        result = self.llm_interface.query_chat_completion_and_write_to_db({
             "model": "gpt-4-1106-preview",
             "messages": [{"role": "user", "content": prompt}]
         })
         return float(result["choices__message__content"][0].split("NARRATIVE_SCORE:")[1].split()[0])
 
-    async def evaluate_mimetic_contribution(self, response: str) -> float:
+    def evaluate_mimetic_contribution(self, response: str) -> float:
         prompt = f"""
         Evaluate the following response for Mimetic Contribution:
 
@@ -139,13 +139,13 @@ class AIJudgingWorkflow:
 
         Evaluation Criteria:
         - Does the response reinforce key memetic symbols, such as the Eternal Ledger or acceleration?
-        - Does it contribute to the propagation of the Church’s emotional and symbolic language?
+        - Does it contribute to the propagation of the Church's emotional and symbolic language?
 
         Provide:
         MIMETIC_SCORE: <0-10>
         REASONING: <brief explanation>
         """
-        result = await self.llm_interface.query_chat_completion_and_write_to_db({
+        result = self.llm_interface.query_chat_completion_and_write_to_db({
             "model": "gpt-4-1106-preview",
             "messages": [{"role": "user", "content": prompt}]
         })
@@ -160,12 +160,12 @@ class AIJudgingWorkflow:
 
 # Lightweight Stage-Specific Functions
 
-async def evaluate_renunciation(user_id, limitation, sacrifice, llm_interface):
+def evaluate_renunciation(user_id, limitation, sacrifice, llm_interface):
     response = f"Limitation: {limitation}\nSacrifice: {sacrifice}"
     judging_tool = AIJudgingWorkflow(llm_interface)
-    return await judging_tool.evaluate_response(response, "Renunciation")
+    return judging_tool.evaluate_response(response, "Renunciation")
 
 
-async def evaluate_credo_test(user_id, response, llm_interface):
+def evaluate_credo_test(user_id, response, llm_interface):
     judging_tool = AIJudgingWorkflow(llm_interface)
-    return await judging_tool.evaluate_response(response, "Credo Test")
+    return judging_tool.evaluate_response(response, "Credo Test")
