@@ -158,19 +158,59 @@ class AIJudgingWorkflow:
         return feedback
 
 
-# Lightweight Stage-Specific Functions
+# Stage-Specific Functions
 
 async def evaluate_renunciation(user_id, limitation, sacrifice, llm_interface):
-    response = f"Limitation: {limitation}\nSacrifice: {sacrifice}"
-    judging_tool = AIJudgingWorkflow(llm_interface)
-    # Await the asynchronous evaluation
-    result = await judging_tool.evaluate_response(response, "Renunciation")
-    return result
+    """Evaluate renunciation response with proper result construction."""
+    try:
+        response = f"Limitation: {limitation}\nSacrifice: {sacrifice}"
+        judging_tool = AIJudgingWorkflow(llm_interface)
+        result = await judging_tool.evaluate_response(response, "Renunciation")
+        
+        # Calculate final score and status
+        final_score = sum(result.get('scores', {}).values()) / 4  # Average of all scores
+        status = "accepted" if final_score >= 5 else "rejected"  # Lowered threshold for testing
+        
+        # Construct proper result dictionary
+        return {
+            "status": status,
+            "scores": result.get('scores', {}),
+            "feedback": result.get('feedback', "Your response requires deeper reflection."),
+            "final_score": final_score
+        }
+    except Exception as e:
+        logger.error(f"Evaluation error: {str(e)}")
+        return {
+            "status": "error",
+            "feedback": "An error occurred during evaluation. Please try again.",
+            "final_score": 0,
+            "scores": {}
+        }
 
 
 
 async def evaluate_credo_test(user_id, response, llm_interface):
-    judging_tool = AIJudgingWorkflow(llm_interface)
-    # Await the asynchronous evaluation
-    result = await judging_tool.evaluate_response(response, "Credo Test")
-    return result
+    """Evaluate credo test response with proper result construction."""
+    try:
+        judging_tool = AIJudgingWorkflow(llm_interface)
+        result = await judging_tool.evaluate_response(response, "Credo Test")
+        
+        # Calculate final score and status
+        final_score = sum(result.get('scores', {}).values()) / 4  # Average of all scores
+        status = "accepted" if final_score >= 5 else "rejected"  # Using same threshold as renunciation
+        
+        # Construct proper result dictionary
+        return {
+            "status": status,
+            "scores": result.get('scores', {}),
+            "feedback": result.get('feedback', "Your understanding of the credo requires deeper reflection."),
+            "final_score": final_score
+        }
+    except Exception as e:
+        logger.error(f"Evaluation error in credo test: {str(e)}")
+        return {
+            "status": "error",
+            "feedback": "An error occurred during evaluation. Please try again.",
+            "final_score": 0,
+            "scores": {}
+        }
