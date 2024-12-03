@@ -160,12 +160,17 @@ class AIJudgingWorkflow:
 
 # Lightweight Stage-Specific Functions
 
-def evaluate_renunciation(user_id, limitation, sacrifice, llm_interface):
+async def evaluate_renunciation(user_id, limitation, sacrifice, llm_interface):
     response = f"Limitation: {limitation}\nSacrifice: {sacrifice}"
     judging_tool = AIJudgingWorkflow(llm_interface)
-    return judging_tool.evaluate_response(response, "Renunciation")
+    # Await the asynchronous evaluation
+    result = await judging_tool.evaluate_response(response, "Renunciation")
+    return result
 
 
-def evaluate_credo_test(user_id, response, llm_interface):
+
+async def evaluate_credo_test(user_id, response, llm_interface):
     judging_tool = AIJudgingWorkflow(llm_interface)
-    return judging_tool.evaluate_response(response, "Credo Test")
+    # Await the asynchronous evaluation
+    result = await judging_tool.evaluate_response(response, "Credo Test")
+    return result

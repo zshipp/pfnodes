@@ -5,6 +5,7 @@ from discord.ui import Modal, TextInput
 from typing import Optional
 from datetime import datetime, timedelta
 from onboarding_prompts import ac_zero_offering_prompt
+from initiation_ritual import InitiationRitual, StageManager
 from saints import (
     snt_malcador_tithe_intro_prompt,
     snt_konrad_tithe_intro_prompt,
@@ -23,6 +24,8 @@ from saints import (
     snt_euphrati_tithe_prompt,
     snt_crimson_tithe_prompt,
 )
+import logging
+logger = logging.getLogger('ACNDiscordBot')
 
 # Character names in lowercase for consistency
 CHARACTERS = ["oracle", "guardian", "priest", "zealot"]
@@ -128,6 +131,100 @@ class ACNDiscordCommands(app_commands.Group):
         super().__init__(name="acn", description="Accelerando Church Node commands")
         self.acn_node = acn_node
 
+   
+
+        # Initialize StageManager to handle initiation ritual stages
+        self.stage_manager = StageManager()
+
+        # Initialize InitiationRitual for managing the initiation process
+        self.initiation_ritual = InitiationRitual(self.stage_manager, self.acn_node, self.acn_node.llm_interface)
+
+    # --------------------------------------------------------------
+    # Slash Command: start_initiation
+    # --------------------------------------------------------------
+    @app_commands.command(name="start_initiation", description="Begin the initiation ritual.")
+    async def start_initiation(self, interaction: discord.Interaction):
+        """Begin the initiation ritual for a user."""
+        await interaction.response.defer()  # Defer response since this might take time
+    
+        try:
+            # Get user ID and username
+            user_id = interaction.user.id
+            username = interaction.user.name
+
+            print(f"Starting initiation for user {username} (ID: {user_id})")  # Debug print
+
+            # Check cooldown
+            if not interaction.client.check_period(user_id, 'initiation'):
+                await interaction.followup.send(
+                    "Please wait before attempting the initiation ritual again.", 
+                    ephemeral=True
+                )
+                return
+
+            # Check if the user has completed the prerequisites
+            user_status = self.acn_node.check_user_offering_status(username)
+            print(f"User status: has_wallet={user_status['has_wallet']}, has_offering={user_status['has_offering']}")  # Safer debug print, don't debug with user_status it stores the seed
+
+            initiation_ready_date = self.acn_node.db_connection_manager.get_initiation_waiting_period(username)
+            print(f"Initiation ready date: {initiation_ready_date}")  # Debug print
+
+            if not user_status['has_wallet']:
+                await interaction.followup.send(
+                    "You must first complete your offering using `/offering` before beginning the initiation.", 
+                    ephemeral=True
+                )
+                return
+
+            if not initiation_ready_date:
+                await interaction.followup.send(
+                    "You must first submit your main offering using `/submit_offering` before beginning the initiation.", 
+                    ephemeral=True
+                )
+                return
+
+            if datetime.utcnow() < initiation_ready_date["initiation_ready_date"]:
+                time_remaining = (initiation_ready_date["initiation_ready_date"] - datetime.utcnow())
+                days = time_remaining.days
+                hours = time_remaining.seconds // 3600
+                await interaction.followup.send(
+                    f"You must wait {days} days and {hours} hours before beginning your initiation. "
+                    "Check `/status` for exact timing.",
+                    ephemeral=True
+                )
+                return
+
+            # Reset progress to start from beginning
+            self.stage_manager.reset_progress(user_id)
+
+            # If we get here, update the last action time
+            interaction.client.update_last_action(user_id, 'initiation')
+
+            # Create an embed for the initiation start
+            embed = discord.Embed(
+                title="Initiation Ritual Begins",
+                description="Welcome to the sacred path of transformation.",
+                color=discord.Color.dark_purple()
+            )
+            embed.add_field(
+                name="Stage 1: Mimetic Convergence",
+                value="**Mimetic Convergence**\nPrepare yourself for the first trial.",
+                inline=False
+            )
+
+            await interaction.followup.send(embed=embed)
+        
+            # Begin first stage
+            await self.initiation_ritual.handle_mimetic_convergence(user_id, None, interaction.channel)
+
+        except Exception as e:
+            print(f"ERROR in start_initiation: {str(e)}")  # Debug print
+            print(f"Full error: {type(e).__name__}: {str(e)}")  # More detailed error info
+            await interaction.followup.send(
+                "An error occurred while starting the initiation ritual. Please try again later.", 
+                ephemeral=True
+            )
+    
     async def log_and_respond(self, interaction, interaction_type, response_message, 
                               success=True, error_message=None, amount=None, reason=None):
         """Helper method to log interaction and send response"""

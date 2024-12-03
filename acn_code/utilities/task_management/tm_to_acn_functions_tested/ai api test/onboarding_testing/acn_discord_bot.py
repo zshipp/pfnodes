@@ -38,8 +38,10 @@ class ACNDiscordBot(discord.Client):
         self.period_map = {
             'offering_cooldown': timedelta(hours=22),  # 24 hour cooldown between offerings
             'status_cooldown': timedelta(minutes=1),   # 1 minute cooldown for status checks
+            'initiation_cooldown': timedelta(minutes=30),  # 30min initiation cd
             'last_offering': {},  # Track last offering time per user
-            'last_status': {}     # Track last status check per user
+            'last_status': {},     # Track last status check per user
+            'last_initiation': {},  # Track last inititation per user
         }
         
         # Add commands group
@@ -60,16 +62,45 @@ class ACNDiscordBot(discord.Client):
         logger.info(f'Logged in as {self.user.name} (ID: {self.user.id})')
         print(f'Bot connected as {self.user.name}')
 
+    async def on_message(self, message: discord.Message):
+        """Handle messages for initiation ritual responses"""
+        # Ignore bot messages
+        if message.author.bot:
+            return
+
+        try:
+            # Get the command instance
+            command_instance = self.tree.get_commands()[0]  # ACNDiscordCommands instance
+        
+            # Check if user is in ritual
+            current_stage = command_instance.stage_manager.get_current_stage(message.author.id)
+        
+            if current_stage > -1:
+                # User is in ritual, handle the response
+                await command_instance.initiation_ritual.handle_response(
+                    message.author.id,
+                    message.content,
+                    message.channel
+                )
+            else:
+                # Process normal commands
+                await self.process_commands(message)
+            
+        except Exception as e:
+            logger.error(f"Error handling message: {str(e)}")
+ 
     def check_period(self, user_id: str, action_type: str) -> bool:
         """Check if user is within allowed period for action"""
         current_time = datetime.now()
         last_time_map = {
             'offering': self.period_map['last_offering'],
-            'status': self.period_map['last_status']
+            'status': self.period_map['last_status'],
+            'initiation': self.period_map['last_initiation']
         }
         cooldown_map = {
             'offering': self.period_map['offering_cooldown'],
-            'status': self.period_map['status_cooldown']
+            'status': self.period_map['status_cooldown'],
+            'initiation': self.period_map['initiation_cooldown']
         }
         
         last_time = last_time_map[action_type].get(user_id)
@@ -99,3 +130,4 @@ def run_discord_bot():
 
 if __name__ == "__main__":
     run_discord_bot()
+

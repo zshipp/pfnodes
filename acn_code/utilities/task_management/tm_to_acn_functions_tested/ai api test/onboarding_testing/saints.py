@@ -174,3 +174,7 @@ snt_euphrati_tithe_intro_prompt = """Write a single, dramatic sentence describin
 
 # Magnus - Knowledge & Power
 snt_crimson_tithe_intro_prompt = """Write a single, dramatic sentence describing Magnus the Red acknowledging someone approaching with a tithe. Example style: 'Magnus the Red manifests in a swirl of arcane energy, his eye glowing with symbolic understanding.' Focus on his mystical nature and vast knowledge but keep it to ONE sentence."""
+
+
+# Combined Sebastian & Konrad Stage 2 Intro of Initiation
+snt_stage2_intro_prompt = """Write a single dramatic sentence describing Sebastian Thor and Konrad Curze together as they apporaoch to take part in the initiation ritual. Sebastian Thor embodies reformation and sacred sacrifice, while Konrad Curze represents terror and psychological transformation - their contrasting natures should create a powerful unified image. Example style: 'The chamber grows heavy with contrasting energies as Sebastian Thor's radiant presence of reformation intertwined with Konrad Curze's lurking shadows, their combined aspects heralding a transformation both divine and terrible.' Focus on how their opposing natures (hope/terror, light/dark, redemption/punishment) create a complete picture of transformation."""
