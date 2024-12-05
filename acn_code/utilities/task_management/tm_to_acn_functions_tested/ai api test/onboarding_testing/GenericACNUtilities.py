@@ -9,6 +9,8 @@ import json
 import datetime
 import nest_asyncio
 nest_asyncio.apply()
+import random
+import string
 
 class GenericACNUtilities:
     def __init__(self, pw_map, node_name='accelerandochurch'):
@@ -211,3 +213,18 @@ class GenericACNUtilities:
     def to_hex(self, string):
         """Convert string to hex"""
         return binascii.hexlify(string.encode()).decode()
+
+    def generate_custom_id(self):
+        """Generates a custom ID for Accelerando Church collaborations.
+        Format: AC_YYYY-MM-DD_HH:MM__LLNN
+        where LL are random uppercase letters and NN are random numbers"""
+        try:
+            letters = ''.join(random.choices(string.ascii_uppercase, k=2))
+            numbers = ''.join(random.choices(string.digits, k=2))
+            second_part = letters + numbers
+            date_string = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M")
+            output = f"AC_{date_string}__{second_part}"
+            output = output.replace(' ', "_")
+            return output
+        except Exception as e:
+            raise Exception(f"Failed to generate custom ID: {str(e)}")

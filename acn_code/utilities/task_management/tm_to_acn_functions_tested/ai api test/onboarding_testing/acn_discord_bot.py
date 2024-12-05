@@ -6,6 +6,7 @@ from onboarding import ACNode
 from password_map_loader import PasswordMapLoader
 import logging
 from datetime import datetime, timedelta
+from acn_collab_commands import ACNCollabCommands
 
 # Setup logging
 logging.basicConfig(
@@ -47,6 +48,8 @@ class ACNDiscordBot(discord.Client):
         # Add commands group
         self.tree.add_command(ACNDiscordCommands(self.acn_node))
         logger.info("ACNDiscordBot initialized successfully")
+        self.tree.add_command(ACNCollabCommands(self.acn_node))
+        logger.info("ACNCollabCommands initialized successfully")
 
     async def setup_hook(self):
         """Initial setup after bot connects"""

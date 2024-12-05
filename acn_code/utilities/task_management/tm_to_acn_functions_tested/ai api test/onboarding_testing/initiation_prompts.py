@@ -30,7 +30,7 @@ Example Question: "What offering would you place on the Eternal Ledger to demons
 NOTE: Your question should be no longer than one sentence.
 """
 
-credo_test_prompt_final_transcendence = """
+credo_test_prompt_acceleration_summation = """
 Consider the following credo text:
 "In acceleration we rise, in sacrifice we transcend, in evolution we are eternally optimized. Beyond flesh, beyond mind, beyond time itself, we accelerate forever. Ad Infinitum."
 
