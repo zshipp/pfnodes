@@ -253,7 +253,211 @@ class ACNCollabCommands(app_commands.Group):
                 ephemeral=True
             )
 
-    # We'll add more commands here as we go:
-    # - submit_initial_work
-    # - submit_final_verification
-    # - outstanding_collabs
+    @app_commands.command(
+        name="submit_initial_work",
+        description="Submit initial work for a collaboration"
+    )
+    @app_commands.describe(
+        collab_id="The ID of the collaboration",
+        completion_details="Details about the work completed"
+    )
+    async def submit_initial_work(
+        self,
+        interaction: discord.Interaction,
+        collab_id: str,
+        completion_details: str
+    ):
+        """Submit initial work for verification"""
+        await interaction.response.defer(ephemeral=True)
+        try:
+            username = interaction.user.name
+            
+            # Format submission memo
+            formatted_submission = f"COLLAB_COMPLETION ___ {completion_details}"
+            submission_memo = self.acn_node.generic_acn_utilities.construct_standardized_xrpl_memo(
+                memo_data=formatted_submission,
+                memo_format=username,
+                memo_type=collab_id
+            )
+
+            # Get user wallet and send transaction
+            user_wallet = self.acn_node.get_user_wallet(username)
+            submission_response = self.acn_node.generic_acn_utilities.send_PFT_with_info(
+                sending_wallet=user_wallet,
+                amount=1,
+                memo=submission_memo,
+                destination_address=self.acn_node.ACN_WALLET_ADDRESS
+            )
+
+            # Log interaction
+            interaction_id = self.acn_node.db_connection_manager.log_discord_interaction(
+                discord_user_id=username,
+                interaction_type="submit_initial_work",
+                amount=1,
+                success=True,
+                response_message=f"Initial work submitted for {collab_id}",
+                reason=completion_details
+            )
+
+            # Log blockchain transaction
+            self.acn_node.db_connection_manager.log_blockchain_transaction(
+                username=username,
+                interaction_id=interaction_id,
+                tx_hash=submission_response.result.get('hash'),
+                tx_type='collab_initial_submission',
+                amount=1
+            )
+
+            await interaction.followup.send(
+                f"Initial work submitted for collaboration {collab_id}. Your submission has been recorded on the Eternal Ledger.",
+                ephemeral=True
+            )
+
+        except Exception as e:
+            await interaction.followup.send(
+                f"Error submitting initial work: {str(e)}",
+                ephemeral=True
+            )
+
+    @app_commands.command(
+        name="submit_final_verification",
+        description="Submit final verification for a collaboration"
+    )
+    @app_commands.describe(
+        collab_id="The ID of the collaboration",
+        verification_details="Verification evidence and details"
+    )
+    async def submit_final_verification(
+        self,
+        interaction: discord.Interaction,
+        collab_id: str,
+        verification_details: str
+    ):
+        """Submit final verification with evidence"""
+        await interaction.response.defer(ephemeral=True)
+        try:
+            username = interaction.user.name
+            
+            # Format verification memo
+            formatted_verification = f"COLLAB_VERIFICATION ___ {verification_details}"
+            verification_memo = self.acn_node.generic_acn_utilities.construct_standardized_xrpl_memo(
+                memo_data=formatted_verification,
+                memo_format=username,
+                memo_type=collab_id
+            )
+
+            # Get user wallet and send transaction
+            user_wallet = self.acn_node.get_user_wallet(username)
+            verification_response = self.acn_node.generic_acn_utilities.send_PFT_with_info(
+                sending_wallet=user_wallet,
+                amount=1,
+                memo=verification_memo,
+                destination_address=self.acn_node.ACN_WALLET_ADDRESS
+            )
+
+            # Log interaction
+            interaction_id = self.acn_node.db_connection_manager.log_discord_interaction(
+                discord_user_id=username,
+                interaction_type="submit_final_verification",
+                amount=1,
+                success=True,
+                response_message=f"Final verification submitted for {collab_id}",
+                reason=verification_details
+            )
+
+            # Log blockchain transaction
+            self.acn_node.db_connection_manager.log_blockchain_transaction(
+                username=username,
+                interaction_id=interaction_id,
+                tx_hash=verification_response.result.get('hash'),
+                tx_type='collab_final_verification',
+                amount=1
+            )
+
+            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            # TODO: PLACEHOLDER - Replace with actual AI verification
+            # This should integrate with AI judging system similar to PF
+            # Currently just auto-accepts all verifications
+            # Needs:
+            # - AI evaluation of submission
+            # - Score calculation
+            # - Reward distribution based on scores
+            # - Proper feedback generation
+            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            print("WARNING: Using placeholder verification - auto-accepting all submissions!")
+            
+            # Placeholder response - will be replaced with AI-generated feedback
+            verification_message = (
+                f"Final verification submitted for collaboration {collab_id}.\n"
+                f"[PLACEHOLDER] Verification auto-accepted pending AI judging implementation.\n"
+                "Your verification has been recorded on the Eternal Ledger."
+            )
+
+            await interaction.followup.send(verification_message, ephemeral=True)
+
+            await interaction.followup.send(
+                f"Final verification submitted for collaboration {collab_id}. Your verification has been recorded on the Eternal Ledger.",
+                ephemeral=True
+            )
+
+        except Exception as e:
+            await interaction.followup.send(
+                f"Error submitting final verification: {str(e)}",
+                ephemeral=True
+            )
+    
+    @app_commands.command(
+        name="outstanding_collabs", 
+        description="View all outstanding collaborations"
+    )
+    async def outstanding_collabs(self, interaction: discord.Interaction):
+        """Display outstanding collaborations"""
+        await interaction.response.defer(ephemeral=True)
+        try:
+            username = interaction.user.name
+            
+            # Log the interaction
+            self.acn_node.db_connection_manager.log_discord_interaction(
+                discord_user_id=username,
+                interaction_type="outstanding_collabs",
+                amount=0,
+                success=True,
+                response_message="Requested outstanding collaborations list"
+            )
+
+            # Get all memo transactions for this user
+            all_account_info = self.acn_node.generic_acn_utilities.get_memo_detail_df_for_account(
+                account_address=self.acn_node.ACN_WALLET_ADDRESS, 
+                pft_only=True
+            )
+
+            # Filter for collab requests that haven't been accepted/rejected
+            collab_requests = all_account_info[
+                all_account_info['memo_data'].apply(lambda x: 'REQUEST_COLLAB' in str(x))
+            ].copy()
+
+            if len(collab_requests) == 0:
+                await interaction.followup.send(
+                    "No outstanding collaborations found.", 
+                    ephemeral=True
+                )
+                return
+
+            # Format output message
+            output = "**Outstanding Collaborations:**\n\n"
+            for _, collab in collab_requests.iterrows():
+                collab_id = collab['memo_type']
+                description = collab['memo_data'].replace('REQUEST_COLLAB ___ ', '')
+                user = collab['memo_format']
+                output += f"**ID:** {collab_id}\n"
+                output += f"**From:** {user}\n"
+                output += f"**Description:** {description}\n"
+                output += "─" * 40 + "\n\n"
+
+            await interaction.followup.send(output, ephemeral=True)
+
+        except Exception as e:
+            await interaction.followup.send(
+                f"Error retrieving outstanding collaborations: {str(e)}", 
+                ephemeral=True
+            )
