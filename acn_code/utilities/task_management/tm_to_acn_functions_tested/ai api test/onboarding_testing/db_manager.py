@@ -2,6 +2,7 @@ import pandas as pd
 import sqlalchemy
 import psycopg2
 from datetime import datetime
+from kms_encryption import encrypt_data, decrypt_data
 
 class DBConnectionManager:
     def __init__(self, pw_map):
@@ -120,6 +121,32 @@ class DBConnectionManager:
         
                 CREATE INDEX IF NOT EXISTS idx_blockchain_tx_hash 
                 ON acn_blockchain_transactions(tx_hash);
+            """)
+
+            # PFT foundation node transaction scraping data:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS xrpl_raw_transactions (
+                    id SERIAL PRIMARY KEY,
+                    tx_hash TEXT UNIQUE,
+                    ledger_index INTEGER,
+                    date TIMESTAMPTZ,
+                    from_address TEXT,
+                    to_address TEXT,
+                    amount NUMERIC,
+                    currency TEXT,
+                    fee NUMERIC,
+                    memo_type TEXT,
+                    memo_format TEXT,
+                    memo_data TEXT,
+                    tx_json JSONB,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_xrpl_tx_hash 
+                ON xrpl_raw_transactions(tx_hash);
+    
+                CREATE INDEX IF NOT EXISTS idx_xrpl_addresses 
+                ON xrpl_raw_transactions(from_address, to_address);
             """)
 
             conn.commit()
@@ -490,3 +517,15 @@ class DBConnectionManager:
         finally:
             cursor.close()
             conn.close()
+
+    def save_wallet_seed(user_id, wallet_seed):
+        # Encrypt the wallet seed before saving
+        encrypted_seed = encrypt_data(wallet_seed)
+        db.save('wallet_seeds', user_id, encrypted_seed)
+
+    def get_wallet_seed(user_id):
+        # Retrieve and decrypt the wallet seed
+        encrypted_seed = db.get('wallet_seeds', user_id)
+        if encrypted_seed:
+            return decrypt_data(encrypted_seed)
+        return None
