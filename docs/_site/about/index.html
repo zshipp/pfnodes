@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>ACCELERANDO.CHURCH</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background-color: black;
+        color: white;
+        font-family: monospace;
+        font-size: 16px; /* 1rem = 16px */
+      }
+      .centered {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        transform: translateY(-2rem); /* Move entire block upward if desired */
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.5rem; /* ~24px */
+        text-align: center;
+      }
+      #underscore {
+        animation: blink 600ms infinite;
+      }
+      @keyframes blink {
+        0%, 49% { opacity: 1; }
+        50%, 99% { opacity: 0; }
+      }
+      #tagline {
+        margin-top: 1em;
+        opacity: 0;
+        transition: opacity 6s;
+        font-size: 1rem; /* ~16px */
+        font-weight: normal;
+        text-align: center;
+      }
+      /* Email at bottom */
+      #email {
+        position: absolute;
+        bottom: 1rem;   /* space from bottom */
+        width: 100%;
+        text-align: center;
+        font-size: 0.8rem;  /* smaller text */
+        color: #ccc;        /* subtle gray color */
+      }
+    </style>
+  </head>
+  <body>
+    <div class="centered">
+      <h1>
+        <span id="typed"></span><span id="underscore">_</span>
+        <div id="tagline">
+          Accelerate forever.
+          <br>
+          Ad infinitum.
+        </div>
+      </h1>
+    </div>
+
+    <!-- The small email text at bottom -->
+    <div id="email">
+      info@accelerando.church
+    </div>
+
+    <script>
+      (async () => {
+        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+        const typedEl = document.getElementById('typed');
+        const taglineEl = document.getElementById('tagline');
+        const text = 'ACCELERANDO CHURCH';
+
+        // Initial pause if desired
+        await sleep(800);
+
+        for (let i = 0; i < text.length; i++) {
+          await sleep(100); // Typing speed
+          typedEl.innerText = text.substring(0, i + 1);
+        }
+
+        // Reveal tagline after typing completes
+        await sleep(400);
+        taglineEl.style.opacity = 1;
+      })();
+    </script>
+  </body>
+</html>

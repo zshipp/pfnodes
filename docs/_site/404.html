@@ -12,8 +12,7 @@
         background-color: black;
         color: white;
         font-family: monospace;
-        /* Base font ~16px, so 1rem = 16px */
-        font-size: 16px; 
+        font-size: 16px; /* 1rem = 16px */
       }
       .centered {
         display: flex;
@@ -25,8 +24,7 @@
       }
       h1 {
         margin: 0;
-        /* 2rem → ~32px */
-        font-size: 1.5rem; 
+        font-size: 1.5rem; /* ~24px */
         text-align: center;
       }
       #underscore {
@@ -40,10 +38,18 @@
         margin-top: 1em;
         opacity: 0;
         transition: opacity 6s;
-        /* 1rem → ~16px */
-        font-size: 1rem;
+        font-size: 1rem; /* ~16px */
         font-weight: normal;
         text-align: center;
+      }
+      /* Email at bottom */
+      #email {
+        position: absolute;
+        bottom: 1rem;   /* space from bottom */
+        width: 100%;
+        text-align: center;
+        font-size: 0.8rem;  /* smaller text */
+        color: #ccc;        /* subtle gray color */
       }
     </style>
   </head>
@@ -58,6 +64,12 @@
         </div>
       </h1>
     </div>
+
+    <!-- The small email text at bottom -->
+    <div id="email">
+      info@accelerando.church
+    </div>
+
     <script>
       (async () => {
         const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
